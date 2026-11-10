@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to use · OryvexVPN</title>
+<meta name="description" content="Install OryvexVPN, pick a route, choose a Tor exit and connect in a few taps.">
+<meta name="theme-color" content="#06080c">
+<meta property="og:title" content="How to use · OryvexVPN">
+<meta property="og:description" content="Install OryvexVPN, pick a route, choose a Tor exit and connect in a few taps.">
+<meta property="og:image" content="assets/icon-256.png">
+<link rel="icon" href="assets/mark.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="assets/icon-256.png">
+<link rel="preload" href="assets/fonts/Inter-Regular.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-page="guide">
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-header"><div class="wrap nav">
+<a class="brand" href="./"><img src="assets/mark.svg" alt="" width="30" height="30">OryvexVPN</a>
+<button id="menu" class="menu-btn" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="nav-links"><svg class="i i-open" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 7h16M4 12h16M4 17h16"/></svg><svg class="i i-close" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+<nav id="nav-links" class="nav-links" aria-label="Main"><a href="about">About</a><a href="guide" aria-current="page">How to use</a><a href="app">App</a><a href="tor">Tor</a><a href="docs">Docs</a><a href="creator">Creator</a><a class="nav-cta" href="download"><svg class="i" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/></svg>Download</a></nav>
+</div></header>
+<main id="main">
+<section class="page-head"><div class="wrap">
+<div class="eyebrow"><svg class="i" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></svg>How to use</div>
+<h1>Three taps to connected.</h1>
+<p class="lead">Install, pick a route, connect. The defaults are good; change them only when your network pushes back.</p>
+</div></section>
+<section class="section"><div class="wrap">
+<ol class="steps">
+<li><b>Install.</b> Android: the APK for your phone (arm64-v8a for most). Windows: unzip and run <code>OryvexVPN.exe</code>.</li>
+<li><b>Pick a route.</b> Leave it on <b>Auto</b>, or choose <b>Tor</b> for the Tor network with no tunnel underneath.</li>
+<li><b>Choose a Tor exit</b> (Tor route): <b>Auto</b>, <b>Fastest</b>, or a <b>Country</b> such as Germany or Netherlands.</li>
+<li><b>Connect.</b> The orb shows each stage live; it turns Connected only after HTTPS returns 200 through the tunnel.</li>
+</ol>
+</div></section>
+
+<section class="section"><div class="wrap">
+<div class="eyebrow"><svg class="i" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 22v-5"/><path d="M9 8V2M15 8V2"/><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8z"/></svg>Proxy mode</div>
+<h2>Point any app at it.</h2>
+<p class="lead">The core serves a SOCKS5 proxy. Use <code>socks5h</code> so DNS goes through the tunnel too.</p>
+<pre><code>socks5h://127.0.0.1:1819</code></pre>
+<p class="muted">Check it works:</p>
+<pre><code>curl -x socks5h://127.0.0.1:1819 https://www.cloudflare.com/cdn-cgi/trace</code></pre>
+<p class="muted">Seeing <code>warp=on</code> means your traffic is passing through the tunnel.</p>
+</div></section>
+
+<section class="section"><div class="wrap">
+<div class="eyebrow"><svg class="i" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 20h.01"/><path d="M8.5 16.43a5 5 0 0 1 7 0"/><path d="M2 8.82a15 15 0 0 1 4.18-2.65M22 8.82a15 15 0 0 0-11.29-3.76M5 12.86a10 10 0 0 1 5.17-2.69M19 12.86a10 10 0 0 0-2-1.51"/><path d="m2 2 20 20"/></svg>When it won't connect</div>
+<h2>Turn it up one step at a time.</h2>
+<div class="grid" style="margin-top:28px">
+<div class="card"><h3>Nothing connects</h3><p>Switch MASQUE to HTTP/2. If that handshake is blocked too, add ClientHello fragmentation. Then try WireGuard or classic Gool.</p></div>
+<div class="card"><h3>Connects, then drops</h3><p>Take the obfuscation profile one step heavier: <code>gfw</code> for MASQUE, <code>aggressive</code> for WireGuard.</p></div>
+<div class="card"><h3>Scan is slow</h3><p>Use the turbo scan, and say yes to reconnecting to your last working gateway.</p></div>
+<div class="card"><h3>Tor is blocked</h3><p>Bridges are fetched for you. Or run Tor through the tunnel. <a href="tor#bridges">Tor bridges</a></p></div>
+</div>
+</div></section>
+<div class="wrap"><div class="band"><div><h2>Ready to get out?</h2><p>Android 5.0+, Windows 7 to 11, Linux, macOS and OpenWrt.</p></div>
+<a class="btn" href="download"><svg class="i" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/></svg>Download OryvexVPN</a></div></div>
+</main>
+<footer class="site-footer"><div class="wrap">
+<div class="foot">
+<div><a class="brand" href="./"><img src="assets/mark.svg" alt="" width="30" height="30">OryvexVPN</a><p>A way out of filtered networks. Free software by Muvixo.</p></div>
+<div><h4>Product</h4><nav aria-label="Product"><a href="about">About</a><a href="app">App</a><a href="download">Download</a></nav></div>
+<div><h4>Learn</h4><nav aria-label="Learn"><a href="guide">How to use</a><a href="tor">Tor</a><a href="docs">Docs</a></nav></div>
+<div><h4>Project</h4><nav aria-label="Project"><a href="creator">Creator</a><a href="https://github.com/OWNER/OryvexCore"><svg class="i fill" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 .5a11.5 11.5 0 0 0-3.64 22.41c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.52-1.33-1.28-1.69-1.28-1.69-1.05-.71.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.68 0-1.26.45-2.28 1.19-3.09-.12-.29-.52-1.46.11-3.04 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.58.23 2.75.11 3.04.74.81 1.19 1.83 1.19 3.09 0 4.41-2.69 5.39-5.25 5.67.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5z"/></svg>GitHub</a><a href="https://github.com/OWNER/OryvexCore/blob/main/LICENSE">AGPL-3.0</a></nav></div>
+</div>
+<div class="legal">&copy; <span id="year">2026</span> Muvixo &middot; OryvexVPN &middot; AGPL-3.0</div>
+</div></footer>
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+  <defs>
+    <linearGradient id="ox-wg-tile" x1="0" y1="0" x2="0" y2="48" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#22A0FF"/>
+      <stop offset="1" stop-color="#0A63E8"/>
+    </linearGradient>
+  </defs>
+  <rect width="48" height="48" rx="13" fill="url(#ox-wg-tile)"/>
+  <g transform="translate(8 8) scale(1.3333)"><circle cx="12" cy="12" r="8.6" fill="none" stroke="#FFF" stroke-width="2.4"/><path d="M7.2 9.2l2.1 5.8 2.7-4.5 2.7 4.5 2.1-5.8" fill="none" stroke="#FFF" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></g>
+</svg>

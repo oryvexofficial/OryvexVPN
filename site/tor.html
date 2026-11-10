@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tor · OryvexVPN</title>
+<meta name="description" content="Tor in OryvexVPN: three ways to combine Tor with the tunnel, exit-country choice, bridges and where it lives in the code.">
+<meta name="theme-color" content="#06080c">
+<meta property="og:title" content="Tor · OryvexVPN">
+<meta property="og:description" content="Tor in OryvexVPN: three ways to combine Tor with the tunnel, exit-country choice, bridges and where it lives in the code.">
+<meta property="og:image" content="assets/icon-256.png">
+<link rel="icon" href="assets/mark.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="assets/icon-256.png">
+<link rel="preload" href="assets/fonts/Inter-Regular.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-page="tor">
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-header"><div class="wrap nav">
+<a class="brand" href="./"><img src="assets/mark.svg" alt="" width="30" height="30">OryvexVPN</a>
+<button id="menu" class="menu-btn" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="nav-links"><svg class="i i-open" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 7h16M4 12h16M4 17h16"/></svg><svg class="i i-close" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+<nav id="nav-links" class="nav-links" aria-label="Main"><a href="about">About</a><a href="guide">How to use</a><a href="app">App</a><a href="tor" aria-current="page">Tor</a><a href="docs">Docs</a><a href="creator">Creator</a><a class="nav-cta" href="download"><svg class="i" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/></svg>Download</a></nav>
+</div></header>
+<main id="main">
+<section class="page-head"><div class="wrap">
+<div class="eyebrow"><svg class="i" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 21c-4.2 0-7-2.9-7-6.6C5 10 9.4 8.2 12 4c2.6 4.2 7 6 7 10.4 0 3.7-2.8 6.6-7 6.6z"/><path d="M12 21c-2 0-3.6-2.8-3.6-6.4 0-3.3 1.8-5.6 3.6-7.6"/><path d="M12 21c2 0 3.6-2.8 3.6-6.4 0-3.3-1.8-5.6-3.6-7.6"/><path d="M12 4V2.5"/></svg>Tor</div>
+<h1>Tor, built in.</h1>
+<p class="lead">Arti, the Rust implementation of Tor, runs inside OryvexCore. Use it on its own, inside the tunnel, or carry the tunnel through it.</p>
+</div></section>
+<section class="section"><div class="wrap">
+<div class="eyebrow"><svg class="i" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/></svg>Three modes</div>
+<h2>Pick how Tor fits in.</h2>
+<div class="grid-2" style="margin-top:28px">
+<div class="card"><h3>Tor alone</h3><p>No tunnel, no WARP identity. The proxy is plain Tor. In the apps this is the <b>Tor</b> route.</p>
+<div class="route"><span class="hop"><svg class="i" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>You</span><svg class="i arrow" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg><span class="hop tor"><svg class="i" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 21c-4.2 0-7-2.9-7-6.6C5 10 9.4 8.2 12 4c2.6 4.2 7 6 7 10.4 0 3.7-2.8 6.6-7 6.6z"/><path d="M12 21c-2 0-3.6-2.8-3.6-6.4 0-3.3 1.8-5.6 3.6-7.6"/><path d="M12 21c2 0 3.6-2.8 3.6-6.4 0-3.3-1.8-5.6-3.6-7.6"/><path d="M12 4V2.5"/></svg>Tor</span><svg class="i arrow" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg><span class="hop"><svg class="i" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9.5"/><path d="M12 2.5a14.5 14.5 0 0 0 0 19 14.5 14.5 0 0 0 0-19"/><path d="M2.5 12h19"/></svg>Internet</span></div>
+<pre style="margin:18px 0 0"><code>oryvexcore --tor-only</code></pre></div>
+<div class="card"><h3>Tor through the tunnel</h3><p>Tor rides inside WARP, so a network that blocks Tor never sees it. Tor proxy on <code>127.0.0.1:1820</code>.</p>
+<div class="route"><span class="hop"><svg class="i" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>You</span><svg class="i arrow" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg><span class="hop"><svg class="i" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M17.5 19H7a5 5 0 1 1 1.1-9.88A6 6 0 0 1 19.6 11.1 4 4 0 0 1 17.5 19z"/></svg>WARP</span><svg class="i arrow" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg><span class="hop tor"><svg class="i" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 21c-4.2 0-7-2.9-7-6.6C5 10 9.4 8.2 12 4c2.6 4.2 7 6 7 10.4 0 3.7-2.8 6.6-7 6.6z"/><path d="M12 21c-2 0-3.6-2.8-3.6-6.4 0-3.3 1.8-5.6 3.6-7.6"/><path d="M12 21c2 0 3.6-2.8 3.6-6.4 0-3.3-1.8-5.6-3.6-7.6"/><path d="M12 4V2.5"/></svg>Tor</span><svg class="i arrow" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg><span class="hop"><svg class="i" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9.5"/><path d="M12 2.5a14.5 14.5 0 0 0 0 19 14.5 14.5 0 0 0 0-19"/><path d="M2.5 12h19"/></svg>Internet</span></div>
+<pre style="margin:18px 0 0"><code>oryvexcore --masque --tor</code></pre></div>
+<div class="card"><h3>The tunnel through Tor</h3><p>Tor first, then WARP is dialled through it. You leave from a WARP exit. MASQUE over HTTP/2 only, Tor carries TCP.</p>
+<div class="route"><span class="hop"><svg class="i" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>You</span><svg class="i arrow" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg><span class="hop tor"><svg class="i" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 21c-4.2 0-7-2.9-7-6.6C5 10 9.4 8.2 12 4c2.6 4.2 7 6 7 10.4 0 3.7-2.8 6.6-7 6.6z"/><path d="M12 21c-2 0-3.6-2.8-3.6-6.4 0-3.3 1.8-5.6 3.6-7.6"/><path d="M12 21c2 0 3.6-2.8 3.6-6.4 0-3.3-1.8-5.6-3.6-7.6"/><path d="M12 4V2.5"/></svg>Tor</span><svg class="i arrow" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg><span class="hop"><svg class="i" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M17.5 19H7a5 5 0 1 1 1.1-9.88A6 6 0 0 1 19.6 11.1 4 4 0 0 1 17.5 19z"/></svg>WARP</span><svg class="i arrow" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg><span class="hop"><svg class="i" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9.5"/><path d="M12 2.5a14.5 14.5 0 0 0 0 19 14.5 14.5 0 0 0 0-19"/><path d="M2.5 12h19"/></svg>Internet</span></div>
+<pre style="margin:18px 0 0"><code>oryvexcore --masque --tor-reverse</code></pre></div>
+<div class="card"><h3>Check you're on Tor</h3><p>Ask the Tor Project which address it sees.</p>
+<pre style="margin:18px 0 0"><code>curl -x socks5h://127.0.0.1:1820 https://check.torproject.org/api/ip</code></pre></div>
+</div>
+</div></section>
+
+<section class="section" id="exits"><div class="wrap">
+<div class="eyebrow"><svg class="i" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9.5"/><path d="M12 2.5a14.5 14.5 0 0 0 0 19 14.5 14.5 0 0 0 0-19"/><path d="M2.5 12h19"/></svg>Exit choice</div>
+<h2>Leave from where you want.</h2>
+<div class="table-wrap"><table>
+<thead><tr><th>Value</th><th>What happens</th></tr></thead>
+<tbody>
+<tr><td><code>--tor-exit auto</code></td><td>Default. Tor picks an exit itself, weighted by bandwidth.</td></tr>
+<tr><td><code>--tor-exit fastest</code></td><td>On every connect, tests exits in the 6 best-served countries and keeps the quickest.</td></tr>
+<tr><td><code>--tor-exit de,nl,se</code></td><td>Leave from that country, first that answers.</td></tr>
+<tr><td><code>--tor-exit-strict</code></td><td>Fail instead of falling back to another country.</td></tr>
+</tbody></table></div>
+<div class="note"><svg class="i" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9.5"/><path d="M12 16v-4M12 8h.01"/></svg><p>The exit list is only ever fetched <b>through Tor itself</b>, then cached in <code>&lt;tor-dir&gt;/exits.json</code>. Until then a bundled list of 32 exit countries is used, resolved locally by Arti's GeoIP table.</p></div>
+</div></section>
+
+<section class="section" id="bridges"><div class="wrap">
+<div class="eyebrow"><svg class="i" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M2 8h20"/><path d="M5 8v12M19 8v12"/><path d="M5 20a7 7 0 0 1 14 0"/><path d="M9 8v6M12 8v5M15 8v6"/></svg>Bridges</div>
+<h2>When Tor itself is blocked.</h2>
+<p class="lead">OryvexCore tries Tor plainly for a moment, then fetches bridges and pluggable transports on its own. You can bring your own too.</p>
+<pre><code>oryvexcore --tor-only \
+  --tor-bridge "obfs4 192.0.2.55:38114 FINGERPRINT cert=... iat-mode=0" \
+  --tor-pt /usr/bin/lyrebird</code></pre>
+<div class="table-wrap"><table>
+<thead><tr><th>Flag</th><th>Default</th><th>What it does</th></tr></thead>
+<tbody>
+<tr><td><code>--tor-bind</code></td><td><code>127.0.0.1:1820</code></td><td>The Tor proxy address</td></tr>
+<tr><td><code>--tor-dir</code></td><td><code>&lt;config&gt;-tor</code></td><td>Directory cache and state</td></tr>
+<tr><td><code>--tor-bridge</code></td><td>fetched as needed</td><td>Bridge lines; repeat for more</td></tr>
+<tr><td><code>--tor-bridge-file</code></td><td></td><td>Your own bridge lines from a file</td></tr>
+<tr><td><code>--tor-bridges</code></td><td></td><td>Go to bridges at once</td></tr>
+<tr><td><code>--no-tor-bridges</code></td><td></td><td>Never use bridges</td></tr>
+<tr><td><code>--tor-pt</code></td><td>found on its own</td><td>Pluggable transport binaries</td></tr>
+<tr><td><code>--tor-pt-dir</code></td><td><code>pt/</code> beside the binary</td><td>Another folder to search</td></tr>
+</tbody></table></div>
+</div></section>
+
+<section class="section" id="source"><div class="wrap">
+<div class="eyebrow"><svg class="i" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m16 18 6-6-6-6"/><path d="m8 6-6 6 6 6"/></svg>Under the hood</div>
+<h2>Where Tor lives in the code.</h2>
+<div class="note"><svg class="i" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9.5"/><path d="M12 16v-4M12 8h.01"/></svg><p>Tor is a <b>cargo feature</b>, off by default. Plain <code>cargo build</code> gives a core with no Tor. Build with <code>scripts/build-core.sh</code> (what CI and Docker use) or <code>--features tor,tor-exit-country</code>.</p></div>
+<pre><code>cd oryvexcore
+bash scripts/build-core.sh cargo build --release   <span class="c"># tor + exit country, falls back on tor</span>
+cargo build --release --features tor,tor-exit-country</code></pre>
+<div class="table-wrap"><table>
+<thead><tr><th>File</th><th>What's in it</th></tr></thead>
+<tbody>
+<tr><td><a href="https://github.com/OWNER/OryvexCore/blob/main/oryvexcore/src/tor.rs"><code>oryvexcore/src/tor.rs</code></a></td><td>The Arti client: modes (alone, through, reverse), bootstrap, the 1820 proxy</td></tr>
+<tr><td><a href="https://github.com/OWNER/OryvexCore/blob/main/oryvexcore/src/tor_exits.rs"><code>oryvexcore/src/tor_exits.rs</code></a></td><td>Exit-country choice: auto, fastest, country list, cache</td></tr>
+<tr><td><a href="https://github.com/OWNER/OryvexCore/blob/main/oryvexcore/src/bridges.rs"><code>oryvexcore/src/bridges.rs</code></a></td><td>Bridge fetching and pluggable transports</td></tr>
+<tr><td><a href="https://github.com/OWNER/OryvexCore/blob/main/oryvexcore/src/cli.rs"><code>oryvexcore/src/cli.rs</code></a></td><td>The <code>--tor*</code> flags</td></tr>
+<tr><td><a href="https://github.com/OWNER/OryvexCore/blob/main/oryvexcore/Cargo.toml"><code>oryvexcore/Cargo.toml</code></a></td><td>The <code>tor</code> and <code>tor-exit-country</code> features (arti-client 0.46)</td></tr>
+<tr><td><a href="https://github.com/OWNER/OryvexCore/blob/main/oryvexcore/scripts/pt-build.sh"><code>oryvexcore/scripts/pt-build.sh</code></a></td><td>Builds the pluggable transports shipped in <code>pt/</code></td></tr>
+<tr><td><a href="https://github.com/OWNER/OryvexCore/blob/main/apps/shared/lib/src/ui/widgets/tor_exit_picker.dart"><code>apps/shared/.../tor_exit_picker.dart</code></a></td><td>The exit picker in the Windows and Android apps</td></tr>
+<tr><td><a href="https://github.com/OWNER/OryvexCore/blob/main/oryvexcore/tor/exit-nodes.txt"><code>oryvexcore/tor/exit-nodes.txt</code></a></td><td>Latest Tor exit IPs from the Tor Project, refresh with <code>tools/update-tor-exits.sh</code></td></tr>
+<tr><td><a href="https://github.com/OWNER/OryvexCore/blob/main/docs/TOR.md"><code>docs/TOR.md</code></a></td><td>Tor route and exit selection notes</td></tr>
+</tbody></table></div>
+</div></section>
+<div class="wrap"><div class="band"><div><h2>Ready to get out?</h2><p>Android 5.0+, Windows 7 to 11, Linux, macOS and OpenWrt.</p></div>
+<a class="btn" href="download"><svg class="i" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/></svg>Download OryvexVPN</a></div></div>
+<section class="section"><div class="wrap"><h2>Leave from 76 countries.</h2><div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:18px"><img src="assets/flags/de.png" alt="DE" title="DE" width="40" height="30" loading="lazy"><img src="assets/flags/nl.png" alt="NL" title="NL" width="40" height="30" loading="lazy"><img src="assets/flags/us.png" alt="US" title="US" width="40" height="30" loading="lazy"><img src="assets/flags/fr.png" alt="FR" title="FR" width="40" height="30" loading="lazy"><img src="assets/flags/se.png" alt="SE" title="SE" width="40" height="30" loading="lazy"><img src="assets/flags/ch.png" alt="CH" title="CH" width="40" height="30" loading="lazy"><img src="assets/flags/fi.png" alt="FI" title="FI" width="40" height="30" loading="lazy"><img src="assets/flags/ro.png" alt="RO" title="RO" width="40" height="30" loading="lazy"><img src="assets/flags/at.png" alt="AT" title="AT" width="40" height="30" loading="lazy"><img src="assets/flags/lu.png" alt="LU" title="LU" width="40" height="30" loading="lazy"><img src="assets/flags/no.png" alt="NO" title="NO" width="40" height="30" loading="lazy"><img src="assets/flags/gb.png" alt="GB" title="GB" width="40" height="30" loading="lazy"><img src="assets/flags/ca.png" alt="CA" title="CA" width="40" height="30" loading="lazy"><img src="assets/flags/pl.png" alt="PL" title="PL" width="40" height="30" loading="lazy"><img src="assets/flags/cz.png" alt="CZ" title="CZ" width="40" height="30" loading="lazy"><img src="assets/flags/is.png" alt="IS" title="IS" width="40" height="30" loading="lazy"><img src="assets/flags/md.png" alt="MD" title="MD" width="40" height="30" loading="lazy"><img src="assets/flags/bg.png" alt="BG" title="BG" width="40" height="30" loading="lazy"><img src="assets/flags/dk.png" alt="DK" title="DK" width="40" height="30" loading="lazy"><img src="assets/flags/es.png" alt="ES" title="ES" width="40" height="30" loading="lazy"><img src="assets/flags/it.png" alt="IT" title="IT" width="40" height="30" loading="lazy"><img src="assets/flags/lt.png" alt="LT" title="LT" width="40" height="30" loading="lazy"><img src="assets/flags/lv.png" alt="LV" title="LV" width="40" height="30" loading="lazy"><img src="assets/flags/ee.png" alt="EE" title="EE" width="40" height="30" loading="lazy"><img src="assets/flags/ua.png" alt="UA" title="UA" width="40" height="30" loading="lazy"><img src="assets/flags/hu.png" alt="HU" title="HU" width="40" height="30" loading="lazy"><img src="assets/flags/sg.png" alt="SG" title="SG" width="40" height="30" loading="lazy"><img src="assets/flags/jp.png" alt="JP" title="JP" width="40" height="30" loading="lazy"><img src="assets/flags/hk.png" alt="HK" title="HK" width="40" height="30" loading="lazy"><img src="assets/flags/au.png" alt="AU" title="AU" width="40" height="30" loading="lazy"><img src="assets/flags/br.png" alt="BR" title="BR" width="40" height="30" loading="lazy"><img src="assets/flags/in.png" alt="IN" title="IN" width="40" height="30" loading="lazy"><img src="assets/flags/za.png" alt="ZA" title="ZA" width="40" height="30" loading="lazy"><img src="assets/flags/tr.png" alt="TR" title="TR" width="40" height="30" loading="lazy"><img src="assets/flags/rs.png" alt="RS" title="RS" width="40" height="30" loading="lazy"><img src="assets/flags/tw.png" alt="TW" title="TW" width="40" height="30" loading="lazy"><img src="assets/flags/vn.png" alt="VN" title="VN" width="40" height="30" loading="lazy"><img src="assets/flags/pe.png" alt="PE" title="PE" width="40" height="30" loading="lazy"><img src="assets/flags/az.png" alt="AZ" title="AZ" width="40" height="30" loading="lazy"><img src="assets/flags/be.png" alt="BE" title="BE" width="40" height="30" loading="lazy"><img src="assets/flags/ie.png" alt="IE" title="IE" width="40" height="30" loading="lazy"><img src="assets/flags/pt.png" alt="PT" title="PT" width="40" height="30" loading="lazy"><img src="assets/flags/gr.png" alt="GR" title="GR" width="40" height="30" loading="lazy"><img src="assets/flags/sk.png" alt="SK" title="SK" width="40" height="30" loading="lazy"><img src="assets/flags/si.png" alt="SI" title="SI" width="40" height="30" loading="lazy"><img src="assets/flags/hr.png" alt="HR" title="HR" width="40" height="30" loading="lazy"><img src="assets/flags/il.png" alt="IL" title="IL" width="40" height="30" loading="lazy"><img src="assets/flags/kr.png" alt="KR" title="KR" width="40" height="30" loading="lazy"><img src="assets/flags/nz.png" alt="NZ" title="NZ" width="40" height="30" loading="lazy"><img src="assets/flags/ar.png" alt="AR" title="AR" width="40" height="30" loading="lazy"><img src="assets/flags/cl.png" alt="CL" title="CL" width="40" height="30" loading="lazy"><img src="assets/flags/mx.png" alt="MX" title="MX" width="40" height="30" loading="lazy"><img src="assets/flags/cr.png" alt="CR" title="CR" width="40" height="30" loading="lazy"><img src="assets/flags/pa.png" alt="PA" title="PA" width="40" height="30" loading="lazy"><img src="assets/flags/ru.png" alt="RU" title="RU" width="40" height="30" loading="lazy"><img src="assets/flags/kz.png" alt="KZ" title="KZ" width="40" height="30" loading="lazy"><img src="assets/flags/th.png" alt="TH" title="TH" width="40" height="30" loading="lazy"><img src="assets/flags/my.png" alt="MY" title="MY" width="40" height="30" loading="lazy"><img src="assets/flags/id.png" alt="ID" title="ID" width="40" height="30" loading="lazy"><img src="assets/flags/ph.png" alt="PH" title="PH" width="40" height="30" loading="lazy"><img src="assets/flags/ae.png" alt="AE" title="AE" width="40" height="30" loading="lazy"><img src="assets/flags/cy.png" alt="CY" title="CY" width="40" height="30" loading="lazy"><img src="assets/flags/mt.png" alt="MT" title="MT" width="40" height="30" loading="lazy"><img src="assets/flags/li.png" alt="LI" title="LI" width="40" height="30" loading="lazy"><img src="assets/flags/sc.png" alt="SC" title="SC" width="40" height="30" loading="lazy"><img src="assets/flags/bz.png" alt="BZ" title="BZ" width="40" height="30" loading="lazy"><img src="assets/flags/gi.png" alt="GI" title="GI" width="40" height="30" loading="lazy"><img src="assets/flags/ge.png" alt="GE" title="GE" width="40" height="30" loading="lazy"><img src="assets/flags/am.png" alt="AM" title="AM" width="40" height="30" loading="lazy"><img src="assets/flags/al.png" alt="AL" title="AL" width="40" height="30" loading="lazy"><img src="assets/flags/mk.png" alt="MK" title="MK" width="40" height="30" loading="lazy"><img src="assets/flags/ba.png" alt="BA" title="BA" width="40" height="30" loading="lazy"><img src="assets/flags/ec.png" alt="EC" title="EC" width="40" height="30" loading="lazy"><img src="assets/flags/co.png" alt="CO" title="CO" width="40" height="30" loading="lazy"><img src="assets/flags/uy.png" alt="UY" title="UY" width="40" height="30" loading="lazy"><img src="assets/flags/by.png" alt="BY" title="BY" width="40" height="30" loading="lazy"></div></div></section>
+</main>
+<footer class="site-footer"><div class="wrap">
+<div class="foot">
+<div><a class="brand" href="./"><img src="assets/mark.svg" alt="" width="30" height="30">OryvexVPN</a><p>A way out of filtered networks. Free software by Muvixo.</p></div>
+<div><h4>Product</h4><nav aria-label="Product"><a href="about">About</a><a href="app">App</a><a href="download">Download</a></nav></div>
+<div><h4>Learn</h4><nav aria-label="Learn"><a href="guide">How to use</a><a href="tor">Tor</a><a href="docs">Docs</a></nav></div>
+<div><h4>Project</h4><nav aria-label="Project"><a href="creator">Creator</a><a href="https://github.com/OWNER/OryvexCore"><svg class="i fill" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 .5a11.5 11.5 0 0 0-3.64 22.41c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.52-1.33-1.28-1.69-1.28-1.69-1.05-.71.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.68 0-1.26.45-2.28 1.19-3.09-.12-.29-.52-1.46.11-3.04 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.58.23 2.75.11 3.04.74.81 1.19 1.83 1.19 3.09 0 4.41-2.69 5.39-5.25 5.67.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5z"/></svg>GitHub</a><a href="https://github.com/OWNER/OryvexCore/blob/main/LICENSE">AGPL-3.0</a></nav></div>
+</div>
+<div class="legal">&copy; <span id="year">2026</span> Muvixo &middot; OryvexVPN &middot; AGPL-3.0</div>
+</div></footer>
+<script src="app.js"></script>
+</body>
+</html>

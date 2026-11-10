@@ -1,0 +1,106 @@
+name: auto-release
+
+# Fully automatic releases. Every push to main:
+#   1. reads the app version from apps/desktop-src/pubspec.yaml
+#   2. if a tag for that version already exists, bumps the patch number (1.0.3 -> 1.0.4)
+#      and the build number in both app pubspecs, and commits that back to main
+#   3. creates and pushes the tag vX.Y.Z
+#   4. starts release.yml on that tag, which builds everything and uploads it to the GitHub release
+#
+# Skip a release for one push by putting [skip release] in the commit message.
+# Bump the minor or major version yourself by editing pubspec.yaml; this workflow then uses it as is.
+#
+# Pushes and tags made with GITHUB_TOKEN do not start other workflows, so there is no loop;
+# step 4 uses workflow_dispatch, which GITHUB_TOKEN is allowed to trigger.
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ["**.md", "docs/**", "site/**", "branding/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: auto-release
+  cancel-in-progress: false
+
+jobs:
+  tag-and-release:
+    name: Tag and release
+    runs-on: ubuntu-latest
+    if: ${{ !contains(github.event.head_commit.message, '[skip release]') }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Work out the version
+        id: ver
+        shell: bash
+        run: |
+          set -euo pipefail
+          file=apps/desktop-src/pubspec.yaml
+          line=$(grep -E '^version:' "$file" | head -1)
+          base=$(echo "$line" | sed -E 's/^version:[[:space:]]*([0-9]+\.[0-9]+\.[0-9]+).*/\1/')
+          build=$(echo "$line" | sed -nE 's/^version:[[:space:]]*[0-9]+\.[0-9]+\.[0-9]+\+([0-9]+).*/\1/p')
+          build=${build:-0}
+          if ! [[ "$base" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Could not read a version like 1.2.3 from $file"; exit 1
+          fi
+
+          bumped=false
+          version="$base"
+          if git rev-parse -q --verify "refs/tags/v$version" >/dev/null; then
+            # Start from the highest existing tag with the same major.minor, then add one.
+            IFS=. read -r major minor patch <<< "$base"
+            latest=$(git tag -l "v$major.$minor.*" | sed 's/^v//' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1)
+            IFS=. read -r _ _ lpatch <<< "${latest:-$base}"
+            version="$major.$minor.$((lpatch + 1))"
+            bumped=true
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "build=$((build + 1))" >> "$GITHUB_OUTPUT"
+          echo "bumped=$bumped" >> "$GITHUB_OUTPUT"
+          echo "Release version: v$version (bumped: $bumped)"
+
+      - name: Sync version files
+        shell: bash
+        run: |
+          set -euo pipefail
+          ver='${{ steps.ver.outputs.version }}'
+          if [ '${{ steps.ver.outputs.bumped }}' = 'true' ]; then
+            full="$ver+${{ steps.ver.outputs.build }}"
+            for f in apps/desktop-src/pubspec.yaml apps/android-src/pubspec.yaml; do
+              [ -f "$f" ] && sed -i -E "s/^version:.*/version: $full/" "$f"
+            done
+          fi
+          # The version the app shows in Settings and uses for the update check.
+          sed -i -E "s/^const kAppVersion = '[^']*';/const kAppVersion = '$ver';/" apps/shared/lib/src/core/version.dart
+          if git diff --quiet; then
+            echo "Version files already match v$ver"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "Release v$ver [skip release]"
+          git push origin HEAD:main
+
+      - name: Create and push the tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="v${{ steps.ver.outputs.version }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$tag" -m "OryvexVPN $tag"
+          git push origin "$tag"
+
+      - name: Start the release build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run release.yml --repo "${{ github.repository }}" --ref "v${{ steps.ver.outputs.version }}"

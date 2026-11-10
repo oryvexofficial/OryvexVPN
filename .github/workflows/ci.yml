@@ -1,0 +1,37 @@
+name: ci
+# Fast checks on every push: core unit tests (exit directory, CLI, bridges) and script syntax.
+on:
+  push:
+    branches: [main, master]
+    paths-ignore: ["**.md", "docs/**", "branding/**", "site/**"]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+env:
+  CARGO_TERM_COLOR: always
+jobs:
+  core-tests:
+    name: Core unit tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: oryvexcore
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: oryvexcore -> target
+          key: ci-tests
+      - uses: lukka/get-cmake@latest
+      - name: Unit tests
+        run: cargo test --lib
+      - name: Script syntax
+        run: |
+          for f in scripts/*.sh ../apps/android-src/tool/*.sh ../tools/*.sh; do bash -n "$f"; done

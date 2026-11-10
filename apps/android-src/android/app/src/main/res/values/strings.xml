@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">OryvexVPN</string>
+    <string name="channel_name">Connection status</string>
+    <string name="status_starting">Starting…</string>
+    <string name="status_connecting">Finding a way out…</string>
+    <string name="status_connected">Connected · proxy ready</string>
+    <string name="status_vpn">Connected · VPN on</string>
+    <string name="status_stopping">Disconnecting…</string>
+    <string name="action_disconnect">Disconnect</string>
+</resources>
