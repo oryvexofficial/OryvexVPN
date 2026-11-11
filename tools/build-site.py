@@ -176,7 +176,7 @@ def page(key, title, desc, body, extra_head=""):
 {THEME_INIT}</head>
 <body data-page="{key}">
 {shell(key, body)}
-<script src="app.js"></script>
+<script src="app.js?v=bypass2"></script>
 </body>
 </html>
 '''
@@ -639,7 +639,7 @@ def make_404(html, css, mark):
     # no external CSS/fonts/icons in <head>: the root finder adds them once it knows the root
     html = re.sub(r'<link rel="(icon|apple-touch-icon|preload|stylesheet)"[^>]*>\n', "", html)
     html = re.sub(r'<meta property="og:image"[^>]*>\n', "", html)
-    html = html.replace('<script src="app.js"></script>\n', "")
+    html = html.replace('<script src="app.js?v=bypass2"></script>\n', "")
     inline = re.sub(r'@font-face\{[^}]*\}\n?', "", css)
     inline = re.sub(r'/\*.*?\*/', "", inline, flags=re.S)
     html = html.replace("</head>", f"<style>{inline}</style>\n</head>")
