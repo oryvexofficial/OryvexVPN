@@ -13,6 +13,7 @@ import 'widgets/brand.dart';
 import 'widgets/bypass_list.dart';
 import 'widgets/motion.dart';
 import 'widgets/orb.dart';
+import 'widgets/route_about.dart';
 import 'widgets/section.dart';
 import 'widgets/sparkline.dart';
 import 'widgets/steps_view.dart';
@@ -283,7 +284,9 @@ class _Hero extends StatelessWidget {
     final step = c.plan.current;
     final shown = c.routeProtocol;
     final String route;
-    if (s.bypassOnly) {
+    if (s.mitmOnly) {
+      route = 'MITM · domain fronting';
+    } else if (s.bypassOnly) {
       route = 'Bypass · direct, packets reshaped';
     } else if (s.torOnly) {
       route = 'Tor · ${torExitLabel(c)}';
@@ -620,6 +623,14 @@ class _Bento extends StatelessWidget {
                       ? 'Tor picks by bandwidth'
                       : '${c.torExits.nameOf(c.torExitInUse!)}${c.torExitMs == null ? '' : ' · ${c.torExitMs} ms'}'),
             )
+          else if (c.settings.mitmOnly)
+            _MetricTile(
+              icon: Icons.verified_user_rounded,
+              label: 'Certificate',
+              value: 'Made here',
+              foot: 'Tap to see how MITM works',
+              onTap: () => showRouteAbout(context, 'mitm', backend: c.backend),
+            )
           else if (c.settings.bypassOnly)
             _MetricTile(
               icon: Icons.checklist_rounded,
@@ -754,6 +765,14 @@ class _RouteAndMode extends StatelessWidget {
             ),
             const SizedBox(height: 10),
             _Hint(Choices.protocolHints[s.protocol] ?? ''),
+            Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: () => showRouteAbout(context, s.protocol, backend: c.backend),
+                  icon: const Icon(Icons.info_outline_rounded, size: 18),
+                  label: const Text('About this connection'),
+                ),
+              ),
             if (s.usesTorExit) ...[
               const SizedBox(height: 20),
               TorExitPicker(controller: c),

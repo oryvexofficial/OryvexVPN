@@ -272,6 +272,7 @@ const protocolIcons = <String, String>{
   'gool': 'assets/protocols/gool.svg',
   'tor': 'assets/protocols/tor.svg',
   'bypass': 'assets/protocols/bypass.svg',
+  'mitm': 'assets/protocols/mitm.svg',
 };
 
 /// A wrap of single-choice pills bound to a string value, each with an optional icon.

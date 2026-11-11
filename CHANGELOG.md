@@ -1,5 +1,15 @@
 # OryvexVPN 1.0.0 (Created by Muvixo)
 
+## Unreleased: MITM route and About texts
+
+- New **MITM** connection (`oryvexcore --mitm`, `--protocol mitm`): domain fronting for Google/YouTube, Meta (Instagram, WhatsApp, Facebook) and Fastly sites (Reddit, CNN, BuzzFeed...), built into the core. No v2ray, no outside server, no engine process. Based on patterniha/MITM-DomainFronting (GPL-3.0).
+- The core makes a certificate authority per device (`oryvexcore-mitm/`); the app installs it (Windows: current-user trusted roots; Android: saves to Downloads and opens Settings).
+- Windows app, Windows Lite and Android app all have MITM. Windows system proxy is automatic for MITM like Bypass.
+- Every connection has **About this connection** in the app (Connect page and Settings): what it is, how it works, what it is good at, its limits and where it runs.
+- Android: APKs are signed with one fixed key so updates install over older builds ("App not installed" fix), hardware features are optional, ABIs are arm64-v8a, armeabi-v7a and x86_64 plus a universal APK; CI verifies signature and ABIs.
+- Site: the home page is a real landing page (no demo), with Android install help.
+- Bundled Mozilla CA list (`oryvexcore/src/mitm_roots.pem`, MPL-2.0) is used to check the servers MITM fronts to.
+
 ## Unreleased: new website
 
 - `site/` redesigned to look and work like the app: sidebar with number-key shortcuts (1 to 8), title bar, ink and paper appearances (switch top right, remembered), floating tab bar and a "More" sheet on phones, page transitions where the browser supports them.

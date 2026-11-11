@@ -200,6 +200,25 @@ class AndroidBackend implements CoreBackend {
   }
 
   @override
+  Future<String> installMitmCertificate() async {
+    try {
+      final dir = await _method.invokeMethod<String>('configDir') ?? '';
+      final out = await _method.invokeMethod<String>(
+              'installCertificate', {'path': '$dir/oryvexcore-mitm/oryvex-mitm-ca.crt'}) ??
+          '';
+      if (out == 'missing') {
+        return 'Connect once with MITM first (it makes the certificate), then tap Install again.';
+      }
+      final saved = out.contains('Downloads') ? ' A copy is in your Downloads folder.' : '';
+      return 'Open Settings > Security and privacy > More security settings > Install from device storage > CA certificate > Install anyway, then pick oryvex-mitm-ca.crt.$saved Then use Chrome or another browser.';
+    } on PlatformException catch (e) {
+      return e.message ?? e.code;
+    } on MissingPluginException {
+      return 'Not available in this build.';
+    }
+  }
+
+  @override
   Future<void> start(CoreSettings settings, int run) async {
     _attach();
     final String dir;

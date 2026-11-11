@@ -394,6 +394,18 @@ Bypass (no tunnel):
   --bypass-args <list>     extra options for the engine, separated by spaces
   --bypass-bin <path>      the engine (oryvex-bypass), when it is not beside oryvexcore
 
+MITM (no tunnel, no outside server):
+  --mitm                   a direct route that re-sends Google/YouTube, Meta (Instagram,
+                           WhatsApp, Facebook) and Fastly-hosted sites (Reddit and others)
+                           with another site's name in the TLS handshake (domain fronting).
+                           oryvexcore makes a certificate authority on this device; install
+                           its certificate (oryvex-mitm-ca.crt) as trusted once, and use a
+                           browser. Your address does not change
+  --mitm-make-ca           make the certificate authority now (if there is none), print the
+                           path of its certificate and stop
+  --mitm-dir <path>        where the certificate authority is kept (default: beside the
+                           identity file, in <name>-mitm)
+
 Advanced:
   --perf <low|medium|high> force a resource profile instead of auto-detecting from cpu/ram
                            (low: routers/small boards, medium: typical desktop, high: servers)
@@ -424,6 +436,8 @@ Environment variables:
   ORYVEXCORE_BYPASS_DOH                --bypass-doh (1) or --bypass-no-doh (0)
   ORYVEXCORE_BYPASS_DROP_QUIC          --bypass-drop-quic (1) or --bypass-keep-quic (0)
   ORYVEXCORE_BYPASS_ARGS               --bypass-args
+  ORYVEXCORE_MITM                      --mitm
+  ORYVEXCORE_MITM_DIR                  --mitm-dir
   ORYVEXCORE_TOR                       chain for --tor, reverse, or only
   ORYVEXCORE_TOR_BRIDGES               --tor-bridge, several separated by ;
                                    auto for --tor-bridges, off for --no-tor-bridges
@@ -631,6 +645,9 @@ pub fn parse_args(args: Vec<String>) -> crate::error::Result<Parsed> {
             "--tor-exit" => set("ORYVEXCORE_TOR_EXIT", next_value!()),
             "--tor-exit-strict" => set("ORYVEXCORE_TOR_EXIT_STRICT", "1"),
             "--tor-exit-best" | "--tor-best-exit" => set("ORYVEXCORE_TOR_EXIT_BEST", "1"),
+            "--mitm" => set("ORYVEXCORE_MITM", "1"),
+            "--mitm-make-ca" => set("ORYVEXCORE_MITM_MAKE_CA", "1"),
+            "--mitm-dir" => set("ORYVEXCORE_MITM_DIR", next_value!()),
             "--bypass" => set("ORYVEXCORE_BYPASS", "1"),
             "--bypass-bin" => set("ORYVEXCORE_BYPASS_BIN", next_value!()),
             "--bypass-strategy" => set("ORYVEXCORE_BYPASS_STRATEGY", next_value!()),

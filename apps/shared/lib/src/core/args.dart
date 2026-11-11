@@ -16,7 +16,10 @@ List<String> buildCoreArgs(
     '--bind', '$host:${s.socksPort}',
   ];
 
-  if (s.bypassOnly) {
+  if (s.mitmOnly) {
+    // No tunnel, no identity, no engine process: the core itself fronts the listed sites.
+    args.add('--mitm');
+  } else if (s.bypassOnly) {
     // No tunnel and no WARP identity: the core runs its bypass engine on the SOCKS5 port.
     args.add('--bypass');
     switch (s.ip) {
@@ -74,7 +77,7 @@ List<String> buildCoreArgs(
   // On Windows, Bypass can route the system proxy directly to its local HTTP forwarder.
   // Android's whole-device VPN handles traffic below the app proxy layer, so it does not need
   // this extra listener unless the user explicitly asked for one.
-  final wantHttp = s.httpProxy || (!android && (s.systemProxy || s.bypassOnly));
+  final wantHttp = s.httpProxy || (!android && (s.systemProxy || s.directOnly));
   if (wantHttp) args.addAll(['--http-proxy', '$host:${s.httpPort}']);
 
   // Live traffic counters for the dashboard.

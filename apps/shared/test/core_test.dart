@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:oryvex_shared/src/core/args.dart';
 import 'package:oryvex_shared/src/core/bypass_services.dart';
 import 'package:oryvex_shared/src/core/log_line.dart';
+import 'package:oryvex_shared/src/core/route_about.dart';
 import 'package:oryvex_shared/src/core/settings.dart';
 import 'package:oryvex_shared/src/core/update_service.dart';
 import 'package:oryvex_shared/src/core/steps.dart';
@@ -125,6 +126,36 @@ void main() {
     expect(args, isNot(contains('--protocol')));
     expect(args, isNot(contains('--scan')));
     expect(args, isNot(contains('--tor-only')));
+  });
+
+  test('MITM asks the core for its own fronting proxy and nothing else', () {
+    final s = CoreSettings()..protocol = 'mitm';
+    expect(s.mitmOnly, isTrue);
+    expect(s.directOnly, isTrue);
+    expect(s.noTunnel, isTrue);
+    final args = buildCoreArgs(s, configPath: '/tmp/o.toml', android: false);
+    expect(args, contains('--mitm'));
+    expect(args, containsAll(['--http-proxy', '127.0.0.1:1820']));
+    expect(args, isNot(contains('--bypass')));
+    expect(args, isNot(contains('--protocol')));
+    expect(Choices.protocols.containsKey('mitm'), isTrue);
+    expect(Choices.autoOrder, isNot(contains('mitm')));
+  });
+
+  test('MITM closes its stages from the core\'s lines', () {
+    final plan = ConnectionPlan.of(CoreSettings()..protocol = 'mitm', android: false)..begin();
+    expect(plan.steps.map((x) => x.id), ['start', 'mitm', 'ready']);
+    plan.ingest('[*] starting the mitm engine');
+    plan.ingest('[+] mitm certificate: /x/oryvex-mitm-ca.crt');
+    plan.ingest('[+] socks5 server listening on 127.0.0.1:1819');
+    expect(plan.steps.every((x) => x.status == StepStatus.done), isTrue);
+  });
+
+  test('every connection has an About text', () {
+    for (final id in Choices.protocols.keys) {
+      expect(routeAbout[id], isNotNull, reason: id);
+      expect(routeAbout[id]!.how, isNotEmpty, reason: id);
+    }
   });
 
   test('Windows Bypass automatically gets an HTTP listener for the system proxy', () {

@@ -59,7 +59,14 @@ class ConnectionPlan {
 
   factory ConnectionPlan.of(CoreSettings s, {required bool android}) {
     final steps = <ConnStep>[];
-    if (s.bypassOnly) {
+    if (s.mitmOnly) {
+      steps.add(ConnStep('start', 'Start the core',
+          finishes: const ['starting the mitm engine'], idle: 'Launching'));
+      steps.add(ConnStep('mitm', 'Prepare your certificate',
+          starts: const ['starting the mitm engine'],
+          finishes: const ['mitm certificate:'],
+          idle: 'Loading the certificate made on this device'));
+    } else if (s.bypassOnly) {
       steps.add(ConnStep('start', 'Start the core',
           finishes: const ['starting the bypass engine'], idle: 'Launching'));
       steps.add(ConnStep('bypass', 'Start the bypass engine',
@@ -231,6 +238,7 @@ class ConnectionPlan {
         if (x.id == 'scan' && e != null) detail = e.group(1);
         if (x.id == 'tor' || x.id == 'psiphon') detail = 'Ready';
         if (x.id == 'bypass') detail = 'Ready';
+        if (x.id == 'mitm') detail = 'Ready';
         if (x.id == 'exit') {
           final u = _exitUsing.firstMatch(message);
           if (u != null) {

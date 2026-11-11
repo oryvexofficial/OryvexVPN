@@ -33,6 +33,45 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    /** Saves the MITM certificate to Downloads and opens the system's certificate install. */
+    private fun installCertificate(path: String): String {
+        val file = java.io.File(path)
+        if (!file.isFile) return "missing"
+        val bytes = file.readBytes()
+        var where = ""
+        try {
+            if (Build.VERSION.SDK_INT >= 29) {
+                val values = android.content.ContentValues().apply {
+                    put(android.provider.MediaStore.Downloads.DISPLAY_NAME, "oryvex-mitm-ca.crt")
+                    put(android.provider.MediaStore.Downloads.MIME_TYPE, "application/x-x509-ca-cert")
+                    put(android.provider.MediaStore.Downloads.RELATIVE_PATH, android.os.Environment.DIRECTORY_DOWNLOADS)
+                }
+                val uri = contentResolver.insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+                if (uri != null) {
+                    contentResolver.openOutputStream(uri)?.use { it.write(bytes) }
+                    where = "Downloads"
+                }
+            }
+        } catch (_: Throwable) {
+        }
+        // Android 10 and older install it straight from the app; 11+ must do it from Settings.
+        if (Build.VERSION.SDK_INT < 30) {
+            try {
+                val intent = android.security.KeyChain.createInstallIntent()
+                intent.putExtra(android.security.KeyChain.EXTRA_CERTIFICATE, bytes)
+                intent.putExtra(android.security.KeyChain.EXTRA_NAME, "OryvexVPN MITM CA")
+                startActivity(intent)
+                return "installer $where"
+            } catch (_: Throwable) {
+            }
+        }
+        try {
+            startActivity(Intent(android.provider.Settings.ACTION_SECURITY_SETTINGS))
+        } catch (_: Throwable) {
+        }
+        return "settings $where"
+    }
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         val messenger = flutterEngine.dartExecutor.binaryMessenger
@@ -92,6 +131,7 @@ class MainActivity : FlutterActivity() {
                             result.success(opened)
                         }
                     }
+                    "installCertificate" -> result.success(installCertificate(call.argument<String>("path") ?: ""))
                     "deviceInfo" -> result.success(
                         mapOf(
                             "abis" to Build.SUPPORTED_ABIS.toList(),

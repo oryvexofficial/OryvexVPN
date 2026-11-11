@@ -12,6 +12,7 @@ import '../core/update_check.dart';
 import 'theme.dart';
 import 'widgets/brand.dart';
 import 'widgets/bypass_list.dart';
+import 'widgets/route_about.dart';
 import 'widgets/motion.dart';
 import 'widgets/section.dart';
 import 'widgets/tor_exit_picker.dart';
@@ -111,6 +112,25 @@ class SettingsPage extends StatelessWidget {
                         hint: Choices.protocolHints[s.protocol],
                         onChanged: (v) => set((x) => x.protocol = v),
                       ),
+                      NavRow(
+                        title: 'About this connection',
+                        value: 'How ${Choices.protocols[s.protocol] ?? 'it'} works',
+                        icon: Icons.info_outline_rounded,
+                        onTap: () => showRouteAbout(context, s.protocol, backend: c.backend),
+                      ),
+                      if (s.mitmOnly) NavRow(
+                        title: 'Certificate',
+                        value: 'Install once',
+                        icon: Icons.verified_user_rounded,
+                        onTap: () => showRouteAbout(context, 'mitm', backend: c.backend),
+                      ),
+                      if (s.mitmOnly) ChoiceRow(
+                        label: 'IP version',
+                        segmented: true,
+                        options: Choices.ips,
+                        value: s.ip,
+                        onChanged: (v) => set((x) => x.ip = v),
+                      ),
                       if (!s.noTunnel && (usesMasqueCarrier(s.protocol) || s.protocol == 'auto'))
                         ChoiceRow(
                           label: 'MASQUE carrier',
@@ -189,6 +209,8 @@ class SettingsPage extends StatelessWidget {
                           title: 'Whole-device VPN',
                           subtitle: s.torOnly
                               ? 'Route every app through Tor. DNS is answered locally.'
+                              : s.mitmOnly
+                                  ? 'Route the device through the MITM proxy. Browsers that trust your certificate reach the listed sites; other apps go out directly.'
                               : s.bypassOnly
                                   ? 'Route every app through the bypass engine, with its first packets reshaped.'
                                   : 'When off, only apps configured to use the proxy are routed.',
@@ -229,7 +251,7 @@ class SettingsPage extends StatelessWidget {
                         onChanged: (v) => set((x) => x.httpProxy = v),
                       ),
                       if (s.httpProxy ||
-                          (c.backend.supportsSystemProxy && (s.systemProxy || s.bypassOnly)))
+                          (c.backend.supportsSystemProxy && (s.systemProxy || s.directOnly)))
                         FieldRow(
                           label: 'HTTP port',
                           value: '${s.httpPort}',
@@ -239,11 +261,11 @@ class SettingsPage extends StatelessWidget {
                       if (c.backend.supportsSystemProxy)
                         SwitchRow(
                           title: 'Windows system proxy',
-                          subtitle: s.bypassOnly
-                              ? 'Automatically on for Bypass. Apps that use Windows proxy settings follow it; your previous setting is restored when disconnected.'
+                          subtitle: s.directOnly
+                              ? 'Automatically on for Bypass and MITM. Apps that use Windows proxy settings follow it; your previous setting is restored when disconnected.'
                               : 'Apply while connected and restore your previous setting when disconnected.',
-                          value: s.systemProxy || s.bypassOnly,
-                          enabled: !s.bypassOnly,
+                          value: s.systemProxy || s.directOnly,
+                          enabled: !s.directOnly,
                           onChanged: (v) => set((x) => x.systemProxy = v),
                         ),
                       SwitchRow(

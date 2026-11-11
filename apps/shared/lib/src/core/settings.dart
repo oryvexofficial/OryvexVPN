@@ -6,13 +6,17 @@ import 'package:shared_preferences/shared_preferences.dart';
 class CoreSettings {
   CoreSettings();
 
-  /// auto | wg | masque | mim | gool | tor | bypass.
+  /// auto | wg | masque | mim | gool | tor | bypass | mitm.
   ///
   /// auto tries WireGuard, then MASQUE, then MASQUE², then Gool, and keeps the first one that
   /// connects. tor skips the tunnel: the proxy (and on Android the device VPN) is plain Tor.
   /// bypass skips it too: traffic leaves directly, with the first packets of each connection
   /// reshaped so a filter cannot read the site name (no change of exit address).
   String protocol = 'auto';
+
+  /// mitm skips it as well: oryvexcore itself re-sends Google, Meta and Fastly sites with another
+  /// name in the TLS handshake (domain fronting), using a certificate authority made on this
+  /// device. No v2ray, no outside server.
 
   /// Bypass: resolve names with the engine's own anti-poisoning resolver.
   bool bypassDoh = true;
@@ -129,8 +133,14 @@ class CoreSettings {
   /// No tunnel: the main proxy is the Bypass engine, going out directly.
   bool get bypassOnly => protocol == 'bypass';
 
-  /// The route has no WARP tunnel under it (Tor or Bypass), so tunnel settings do not apply.
-  bool get noTunnel => torOnly || bypassOnly;
+  /// No tunnel: the main proxy is oryvexcore's own domain-fronting proxy (MITM).
+  bool get mitmOnly => protocol == 'mitm';
+
+  /// Goes out directly, with an engine of its own on the SOCKS5 port (Bypass or MITM).
+  bool get directOnly => bypassOnly || mitmOnly;
+
+  /// The route has no WARP tunnel under it (Tor, Bypass or MITM), so tunnel settings do not apply.
+  bool get noTunnel => torOnly || bypassOnly || mitmOnly;
 
   /// Tor's exit choice is in play for this configuration.
   bool get usesTorExit => torOnly || chain == 'tor';
@@ -261,7 +271,7 @@ class CoreSettings {
   /// Every local port this configuration will bind, with what it is for.
   Map<String, int> portsInUse({required bool android}) {
     final ports = <String, int>{'SOCKS5': socksPort};
-    if (httpProxy || (!android && (systemProxy || bypassOnly))) ports['HTTP'] = httpPort;
+    if (httpProxy || (!android && (systemProxy || directOnly))) ports['HTTP'] = httpPort;
     if (!noTunnel && chain == 'tor') ports['Tor'] = torPort;
     if (!noTunnel && chain == 'psiphon' && !android) ports['Psiphon'] = psiphonPort;
     return ports;
@@ -326,6 +336,7 @@ class Choices {
     'gool': 'Gool',
     'tor': 'Tor',
     'bypass': 'Bypass',
+    'mitm': 'MITM',
   };
 
   /// `auto`, `fastest` or a lowercase two-letter country code.
@@ -372,6 +383,7 @@ class Choices {
     'mim': 'Carry MASQUE inside MASQUE to use a different exit address.',
     'tor': 'Connect directly to Tor, using bridges when needed. Choose an exit country below.',
     'bypass': 'Go out directly and reshape the first packets of each connection so filters cannot read the site name. Your address does not change. Beats packet-by-packet filters and DNS blocking, not filters that block by address.',
+    'mitm': 'Go out directly and re-send YouTube, Google, Instagram, WhatsApp, Facebook, Reddit and similar sites with another site\'s name in the handshake. Needs the OryvexVPN certificate installed once, and a browser. Your address does not change.',
   };
 
   /// One-line taglines for the route cards on the Connect page.
@@ -383,6 +395,7 @@ class Choices {
     'gool': 'WireGuard carried inside MASQUE',
     'tor': 'Connect directly through Tor',
     'bypass': 'Direct route that slips past site-name filters',
+    'mitm': 'Fronts Google, Meta and Fastly sites, no server needed',
   };
 
   /// HTTP/2 first: it is the default carrier.
@@ -441,6 +454,7 @@ class Choices {
         'gool' => 'WireGuard in MASQUE',
         'mim' => 'MASQUE in MASQUE',
         'bypass' => 'Bypass',
+        'mitm' => 'MITM (domain fronting)',
         _ => p,
       };
 }

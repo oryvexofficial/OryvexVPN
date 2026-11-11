@@ -48,12 +48,13 @@ mod app {
     const WM_CORE_LINE: u32 = WM_APP + 1;
     const WM_CORE_EXIT: u32 = WM_APP + 2;
 
-    const PROTOCOLS: [(&str, &str); 5] = [
+    const PROTOCOLS: [(&str, &str); 6] = [
         ("MASQUE", "masque"),
         ("WireGuard", "wg"),
         ("Gool (WG in MASQUE)", "gool"),
         ("MASQUE in MASQUE", "mim"),
         ("Bypass (direct, no tunnel)", "bypass"),
+        ("MITM (fronts Google, Meta, Fastly)", "mitm"),
     ];
     const SCANS: [(&str, &str); 5] = [
         ("Turbo", "turbo"),
@@ -283,7 +284,7 @@ mod app {
         label("SOCKS5 port", 190);
         let port = child(hwnd, "EDIT", "1819", ES_NUMBER | ES_AUTOHSCROLL | WS_TABSTOP | WS_BORDER, 0, (140, 190, 120, 26), ID_PORT, f, s);
         let http = child(hwnd, "BUTTON", "Also serve an HTTP proxy (port + 1)", BS_AUTOCHECKBOX | WS_TABSTOP, 0, (20, 226, 400, 24), ID_HTTP, f, s);
-        let sysproxy = child(hwnd, "BUTTON", "Set Windows system proxy (automatic for Bypass)", BS_AUTOCHECKBOX | WS_TABSTOP, 0, (20, 252, 400, 24), ID_SYSPROXY, f, s);
+        let sysproxy = child(hwnd, "BUTTON", "Set Windows system proxy (automatic for Bypass and MITM)", BS_AUTOCHECKBOX | WS_TABSTOP, 0, (20, 252, 400, 24), ID_SYSPROXY, f, s);
         let connect = child(hwnd, "BUTTON", "Connect", BS_OWNERDRAW | WS_TABSTOP, 0, (20, 290, 400, 46), ID_CONNECT, fb, s);
         let log = child(
             hwnd,
@@ -442,7 +443,7 @@ mod app {
         saved.save();
         let port = saved.port;
         let protocol = PROTOCOLS[saved.protocol.min(PROTOCOLS.len() - 1)].1;
-        let use_system_proxy = saved.sysproxy || protocol == "bypass";
+        let use_system_proxy = saved.sysproxy || protocol == "bypass" || protocol == "mitm";
         let http_port = port + 1;
         let mut args: Vec<String> = vec![
             "--config".into(),
@@ -459,7 +460,7 @@ mod app {
             "--stats-secs".into(),
             "3".into(),
         ];
-        if protocol != "wg" && protocol != "bypass" {
+        if protocol != "wg" && protocol != "bypass" && protocol != "mitm" {
             args.push(CARRIERS[saved.carrier.min(CARRIERS.len() - 1)].1.into());
         }
         if saved.http || use_system_proxy {
@@ -467,6 +468,9 @@ mod app {
             args.push(format!("127.0.0.1:{http_port}"));
         }
 
+        if protocol == "mitm" {
+            append_log("[lite] MITM: install the certificate once. Double-click %APPDATA%\\OryvexCore\\oryvexcore-mitm\\oryvex-mitm-ca.crt, Install Certificate, Current User, Trusted Root Certification Authorities. Then use a browser.");
+        }
         let mut cmd = Command::new(&exe);
         cmd.args(&args)
             .current_dir(&dir)

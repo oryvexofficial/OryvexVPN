@@ -13,7 +13,10 @@ The output is plain static HTML (GitHub Pages serves site/ as is, see pages.yml)
 `tools/set-repo.sh` rewrites the oryvexofficial/OryvexVPN links in the output and in this file.
 style.css and app.js are hand-written and live in site/ directly.
 """
-import pathlib, re
+import pathlib, re, sys
+
+if '--force' not in sys.argv:
+    sys.exit('site/ is now maintained by hand (real home page, MITM docs). Running this generator would bring back the old demo page; pass --force if you really want that.')
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SITE = ROOT / "site"

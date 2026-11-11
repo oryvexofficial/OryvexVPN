@@ -72,6 +72,13 @@ class RoutePreset {
       apply: (s) => s.protocol = 'bypass',
       matches: (s) => s.protocol == 'bypass',
     ),
+    RoutePreset(
+      id: 'mitm',
+      title: 'MITM',
+      tagline: 'Fronts Google, Meta, Fastly. No server',
+      apply: (s) => s.protocol = 'mitm',
+      matches: (s) => s.protocol == 'mitm',
+    ),
   ];
 
   /// The preset [s] currently matches, if any.

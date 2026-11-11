@@ -4,6 +4,7 @@ pub mod oryvexnoize;
 pub mod api;
 pub mod bridges;
 pub mod bypass;
+pub mod mitm;
 pub mod cli;
 pub mod config;
 pub mod consts;
@@ -118,6 +119,10 @@ pub async fn run_with(args: Vec<String>) -> Result<()> {
         return register_identities(wanted, &base_config).await;
     }
 
+    if mitm::make_ca_requested() {
+        return mitm::make_ca_only(&base_config);
+    }
+
     let listen: SocketAddr = std::env::var("ORYVEXCORE_SOCKS")
         .ok()
         .and_then(|s| s.parse().ok())
@@ -126,6 +131,11 @@ pub async fn run_with(args: Vec<String>) -> Result<()> {
     // Bypass has no tunnel: its engine binds the proxy port itself.
     if bypass::enabled() {
         return bypass::run(listen).await;
+    }
+
+    // MITM has no tunnel either: oryvexcore itself is the fronting proxy, no engine process.
+    if mitm::enabled() {
+        return mitm::run(listen, &base_config).await;
     }
 
     // What ends the core on its own, with its error, while its tunnels come and go: a listener the

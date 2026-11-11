@@ -61,6 +61,10 @@ abstract class CoreBackend {
   /// Stops whatever runs. Completes once the core is confirmed gone, or after a hard timeout.
   Future<void> stop();
 
+  /// Makes sure the MITM certificate exists and starts installing it as trusted. Returns what
+  /// the user should know (what happened, or what to do next).
+  Future<String> installMitmCertificate();
+
   /// Called when the app is closing; must leave nothing running behind on desktop.
   Future<void> shutdown();
 }

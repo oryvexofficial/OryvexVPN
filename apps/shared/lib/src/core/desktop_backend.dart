@@ -77,6 +77,28 @@ class DesktopBackend implements CoreBackend {
   }
 
   @override
+  Future<String> installMitmCertificate() async {
+    final dir = Directory(dataDir);
+    if (!dir.existsSync()) dir.createSync(recursive: true);
+    final config = '${dir.path}${_sep}oryvexcore.toml';
+    final crt = File('${dir.path}${_sep}oryvexcore-mitm$_sep' 'oryvex-mitm-ca.crt');
+    if (!crt.existsSync()) {
+      if (!File(coreExe).existsSync()) return 'The core is missing; reinstall OryvexVPN.';
+      await Process.run(coreExe, ['--config', config, '--mitm-make-ca'], workingDirectory: dir.path);
+    }
+    if (!crt.existsSync()) return 'Could not make the certificate. Connect once with MITM, then try again.';
+    if (Platform.isWindows) {
+      // The current user's trusted roots: no administrator needed. Windows asks to confirm.
+      final r = await Process.run('certutil', ['-user', '-addstore', 'Root', crt.path]);
+      return r.exitCode == 0
+          ? 'Installed. Restart your browser, then connect. (Firefox: Settings > Privacy > View Certificates > Import.)'
+          : 'Windows did not install it (you may have pressed No). The file is ${crt.path}; double-click it, choose Install Certificate > Current User > Trusted Root Certification Authorities.';
+    }
+    return 'Certificate saved at ${crt.path}. Add it to your system or browser as a trusted authority '
+        '(Linux: copy to /usr/local/share/ca-certificates and run update-ca-certificates; macOS: Keychain Access > System > Always Trust).';
+  }
+
+  @override
   Future<BackendStatus> status() async {
     final s = _current;
     return BackendStatus(
@@ -145,7 +167,7 @@ class DesktopBackend implements CoreBackend {
       throw BackendException('Could not start the core: ${e.message}');
     }
 
-    final proxyHostPort = Platform.isWindows && (settings.systemProxy || settings.bypassOnly)
+    final proxyHostPort = Platform.isWindows && (settings.systemProxy || settings.directOnly)
         ? '127.0.0.1:${settings.httpPort}'
         : null;
     final s = _Session(run, proc, systemProxyHostPort: proxyHostPort);

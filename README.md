@@ -20,6 +20,7 @@ OryvexCore finds a route that works on your network, opens an encrypted tunnel t
 
 - **Finds its own way out.** Scans for reachable gateways and only trusts one after real traffic passes through it.
 - **Four tunnels.** MASQUE over HTTP/3 or HTTP/2, classic WireGuard, WireGuard in MASQUE (`gool`) and MASQUE in MASQUE (`mim`) for a different exit address.
+- **MITM, no server.** Built-in domain fronting for YouTube/Google, Instagram, WhatsApp, Facebook, Reddit and other Fastly sites: no v2ray, no account. Makes a certificate authority on your device, which you trust once. See [docs/MITM.md](docs/MITM.md).
 - **Bypass, no tunnel.** A direct route that reshapes the first packets of every connection and resolves names itself, so filters that read the site name are fooled. Your address stays the same. On Windows the app automatically uses the Windows system proxy; Android can route the whole device through its VPN service (`--bypass`, see `oryvexcore/bypass/README.md`).
 - **Hard to fingerprint.** Chrome-shaped TLS, ClientHello fragmentation, obfuscation profiles from `light` to `gfw`.
 - **Extra exits.** Tor through the tunnel, Tor alone, or Psiphon through the tunnel (desktop).
@@ -119,6 +120,7 @@ oryvexcore --mim --h2                        # MASQUE inside MASQUE over HTTP/2
 oryvexcore --masque --tor                    # plus a Tor exit on --tor-bind
 oryvexcore --tor-only --tor-exit fastest     # plain Tor, fastest exit country
 oryvexcore --bypass                          # no tunnel: direct, first packets reshaped
+oryvexcore --mitm                            # no tunnel, no server: domain fronting for Google, Meta, Fastly
 ```
 
 Then point apps at `socks5h://127.0.0.1:1819`:

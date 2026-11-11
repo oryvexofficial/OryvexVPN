@@ -167,6 +167,7 @@ class CoreController extends ChangeNotifier {
   /// "Auto · MASQUE over HTTP/3 (2 of 4)", "WireGuard", "Tor · fastest exit".
   String get routeLabel {
     final s = settings;
+    if (s.mitmOnly) return 'MITM · domain fronting';
     if (s.bypassOnly) return 'Bypass · direct, packets reshaped';
     if (s.torOnly) {
       final exit = switch (s.torExit) {
