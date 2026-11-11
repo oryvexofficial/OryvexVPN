@@ -386,7 +386,7 @@ Bypass (no tunnel):
                            reads the site name no longer sees it. Your address does not
                            change. It beats packet-by-packet filters and DNS poisoning,
                            not filters that reassemble the stream or block addresses
-  --bypass-strategy <spec> fix the technique, e.g. "fake(ttl=4),split(sni)"
+  --bypass-strategy <spec> fix the technique, e.g. \"fake(ttl=4),split(sni)\"
                            (default: try techniques per site and keep what works)
   --bypass-no-doh          do not use the engine's own resolver (--bypass-doh turns it on, the default)
   --bypass-keep-quic       let QUIC through (--bypass-drop-quic, the default, drops it so
