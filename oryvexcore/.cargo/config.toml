@@ -1,0 +1,17 @@
+# Link the MSVC C runtime into oryvexcore.exe. Without it the Windows build needs
+# VCRUNTIME140.dll and MSVCP140.dll (the Visual C++ Redistributable) and, where
+# they are missing, exits at start without a word. boring-sys builds BoringSSL
+# with the static runtime too when this target feature is on.
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]
+
+# 32-bit Windows (Windows 10/11 x86).
+[target.i686-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]
+
+# Windows 7 / 8 builds (tier-3 targets, nightly + -Z build-std). See .github/workflows/apps.yml.
+[target.x86_64-win7-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]
+
+[target.i686-win7-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]
