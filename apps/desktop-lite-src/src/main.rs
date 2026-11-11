@@ -587,13 +587,14 @@ mod app {
         });
         if let Some(host_port) = ready_proxy {
             let backup = proxy_enable(&host_port);
+            let proxy_ok = backup.is_some();
             STATE.with(|s| {
                 let mut s = s.borrow_mut();
                 if s.running && s.generation == generation {
                     s.proxy_backup = backup;
                 }
             });
-            append_log(if backup.is_some() {
+            append_log(if proxy_ok {
                 "[lite] system proxy set"
             } else {
                 "[lite] could not set the system proxy"

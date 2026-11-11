@@ -244,6 +244,17 @@ jobs:
           cp "$out/app-x86_64-release.apk"      ../../dist/OryvexVPN-android-x86_64.apk
           ls -l ../../dist
 
+      - name: Verify APKs (signature, ABIs, minSdk)
+        run: |
+          bt=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          for f in ../../dist/*.apk; do
+            echo "== $f"
+            "$bt/apksigner" verify --verbose "$f" | grep -E "Verifies|v1 scheme|v2 scheme|v3 scheme"
+            "$bt/aapt" dump badging "$f" | grep -E "^sdkVersion|native-code"
+          done
+          "$bt/aapt" dump badging ../../dist/OryvexVPN-android-universal.apk | grep native-code | grep -q arm64-v8a || { echo "universal APK has no arm64"; exit 1; }
+          "$bt/aapt" dump badging ../../dist/OryvexVPN-android-universal.apk | grep "^sdkVersion:'21'" || { echo "minSdk is not 21"; exit 1; }
+
       - uses: actions/upload-artifact@v4
         with:
           name: OryvexVPN-android-apks

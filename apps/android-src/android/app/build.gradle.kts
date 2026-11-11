@@ -39,9 +39,25 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        ndk {
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
+        }
     }
 
     signingConfigs {
+        // Fixed fallback key (committed on purpose). CI runners generate a NEW random debug key on
+        // every build, so each APK had a different signature and Android refused to update an older
+        // install ("App not installed"). Signing every build with this same key fixes that. Set the
+        // ANDROID_KEYSTORE_* secrets in CI to use your own private release key instead.
+        create("stable") {
+            storeFile = file("oryvex-stable.jks")
+            storePassword = "oryvexstable"
+            keyAlias = "oryvex"
+            keyPassword = "oryvexstable"
+            enableV1Signing = true // Android 5 to 6
+            enableV2Signing = true // Android 7+
+            enableV3Signing = true // Android 9+ (Samsung One UI)
+        }
         create("release") {
             if (keystorePropertiesFile.exists()) {
                 keyAlias = keystoreProperties["keyAlias"] as String
@@ -57,7 +73,7 @@ android {
             signingConfig = if (keystorePropertiesFile.exists()) {
                 signingConfigs.getByName("release")
             } else {
-                signingConfigs.getByName("debug")
+                signingConfigs.getByName("stable")
             }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
@@ -78,6 +94,8 @@ android {
             // The core ships as an executable named liboryvexcore_cli.so. Android only lets an
             // app exec files from its extracted native library dir, so keep them extracted.
             useLegacyPackaging = true
+            // Never strip or drop ABIs: arm64 (Galaxy A52/A53 and most phones), arm32 (old/low-end), x86_64.
+            pickFirsts.add("**/libc++_shared.so")
             keepDebugSymbols.add("**/liboryvexcore_cli.so")
         }
     }

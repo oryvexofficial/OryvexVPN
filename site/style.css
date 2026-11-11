@@ -436,3 +436,8 @@ pre:hover .copy,pre .copy:focus-visible{opacity:1}
   *,*:before,*:after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}
   .panel[data-state=busy] .orb .core{animation:none}
 }
+.hero{padding:48px 32px}
+.hero .p-head{font-size:clamp(34px,6vw,60px);line-height:1.05;margin:8px 0 16px}
+.hero .p-sub{max-width:62ch;font-size:18px}
+.hero .actions{display:flex;flex-wrap:wrap;gap:12px;margin:24px 0 16px}
+#side-status .eyebrow{margin:0 0 4px}
