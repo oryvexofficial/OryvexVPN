@@ -247,7 +247,7 @@ fn make_ca() -> Result<(X509, PKey<Private>)> {
     b.set_serial_number(&sn).map_err(tls_err)?;
     b.set_subject_name(&name).map_err(tls_err)?;
     b.set_issuer_name(&name).map_err(tls_err)?;
-    let nb = Asn1Time::from_unix(unix_now() - 86_400).map_err(tls_err)?;
+    let nb = Asn1Time::from_unix((unix_now() - 86_400) as _).map_err(tls_err)?;
     b.set_not_before(&nb).map_err(tls_err)?;
     let na = Asn1Time::days_from_now(3650).map_err(tls_err)?;
     b.set_not_after(&na).map_err(tls_err)?;
@@ -325,7 +325,7 @@ impl Authority {
         b.set_serial_number(&sn).map_err(tls_err)?;
         b.set_subject_name(&name).map_err(tls_err)?;
         b.set_issuer_name(self.ca_cert.subject_name()).map_err(tls_err)?;
-        let nb = Asn1Time::from_unix(unix_now() - 86_400).map_err(tls_err)?;
+        let nb = Asn1Time::from_unix((unix_now() - 86_400) as _).map_err(tls_err)?;
     b.set_not_before(&nb).map_err(tls_err)?;
         let na = Asn1Time::days_from_now(90).map_err(tls_err)?;
         b.set_not_after(&na).map_err(tls_err)?;
