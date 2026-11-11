@@ -110,9 +110,12 @@ pub fn extract_jwt_from_html(html: &str) -> Option<String> {
 pub fn extract_jwt_from_cookie(header: &str) -> Option<String> {
     for part in header.split(';') {
         let entry = part.trim();
-        let value = entry
+        let Some(value) = entry
             .strip_prefix("CF_Authorization=")
-            .or_else(|| entry.strip_prefix("cf_authorization="))?;
+            .or_else(|| entry.strip_prefix("cf_authorization="))
+        else {
+            continue;
+        };
         if looks_like_jwt(value) {
             return Some(value.to_string());
         }
@@ -817,6 +820,13 @@ mod tests {
             extract_jwt_from_cookie("session=abc; Path=/; HttpOnly"),
             None
         );
+    }
+
+    #[test]
+    fn an_unrelated_cookie_before_the_authorization_cookie_is_skipped() {
+        let token = jwt("{\"exp\":9999999999}");
+        let header = format!("session=abc; CF_Authorization={token}; Path=/; HttpOnly; Secure");
+        assert_eq!(extract_jwt_from_cookie(&header), Some(token));
     }
 
     #[test]

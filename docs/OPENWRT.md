@@ -6,7 +6,7 @@ When you finish, OryvexCore listens at `127.0.0.1:1819`. Point a proxy client on
 
 The rest of the router stays as it is. Only programs you point at this proxy use OryvexCore.
 
-The short install on the [README](../README.md#openwrt) downloads a release binary and runs it once. Use this page when you want a service, and when that binary is too old to set the server name below.
+The README's release-binary instructions download a binary and run it once. Use this page when you want a service, and when that binary is too old to set the server name below.
 
 ## Why the usual install fails
 
@@ -44,7 +44,7 @@ Clone the current source. A v2.3.0 download will not work.
 
 ```bash
 git clone https://github.com/oryvexofficial/OryvexVPN.git
-cd OryvexCore/oryvexcore
+cd OryvexVPN/oryvexcore
 
 sudo apt-get update
 sudo apt-get install -y build-essential clang cmake ninja-build curl rsync

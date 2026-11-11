@@ -1309,8 +1309,13 @@ static int http_connect_accept(sock_t c, socks_req *rq) {
   char target[264];
   memcpy(target, t, (size_t)(sp - t)); target[sp - t] = 0;
   char *colon = strrchr(target, ':');
-  long port = colon ? strtol(colon + 1, NULL, 10) : 0;
-  if (!colon || port <= 0 || port > 65535) { send_str(c, bad); return -1; }
+  if (!colon || colon == target || colon[1] == 0) { send_str(c, bad); return -1; }
+  for (const char *digit = colon + 1; *digit; digit++) {
+    if (*digit < '0' || *digit > '9') { send_str(c, bad); return -1; }
+  }
+  char *end = NULL;
+  long port = strtol(colon + 1, &end, 10);
+  if (end == colon + 1 || *end != 0 || port <= 0 || port > 65535) { send_str(c, bad); return -1; }
   *colon = 0;
   char *host = target;
   if (host[0] == '[') {
@@ -1518,7 +1523,12 @@ static int socks_accept(sock_t c, socks_req *rq) {
   if (b[0] != 0x05) return -1;
   rq->ver = 5;
   int nm = b[1];
-  if (nm > 0) { if (recv_exact(c, b, nm) != 0) return -1; }
+  if (nm == 0) {
+    uint8_t rep[2] = { 0x05, 0xFF };
+    sock_send_all(c, rep, 2, 0);
+    return -1;
+  }
+  if (recv_exact(c, b, nm) != 0) return -1;
   uint8_t want = auth ? 0x02 : 0x00;
   int offered = !auth;   /* without authentication every client is taken, as always */
   for (int i = 0; i < nm; i++) if (b[i] == want) offered = 1;

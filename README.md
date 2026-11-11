@@ -69,7 +69,7 @@ OryvexVPN/
 ├── docs/                    guide, full reference, Tor exits, OpenWrt
 ├── site/                    GitHub Pages website (pages.yml)
 ├── license-texts/  tools/  .github/workflows/
-└── Dockerfile  LICENSE  NOTICE.md  TRADEMARK.md
+└── Dockerfile  LICENSE  NOTICE.md
 ```
 
 ## Build
@@ -134,7 +134,7 @@ Every flag has an environment variable; `oryvexcore help` lists them all. The pr
 ## Docker
 
 ```bash
-docker run -it -p 127.0.0.1:1819:1819 -v oryvexcore-data:/data ghcr.io/owner/oryvexcore:latest
+docker run -it -p 127.0.0.1:1819:1819 -v oryvexcore-data:/data ghcr.io/oryvexofficial/oryvexvpn:latest
 ```
 
 Keep the `-v` volume: it holds your WARP identity, and a new identity on every start gets rate limited. Publish the port to `127.0.0.1` only.
@@ -151,4 +151,4 @@ chmod +x oryvexcore.sh && ./oryvexcore.sh install
 Created by **Muvixo**. MASQUE is built on Cloudflare's **quiche**. Fonts: Inter and JetBrains Mono (SIL OFL 1.1, see `apps/shared/fonts/OFL.txt`).
 
 
-AGPL-3.0. See [LICENSE](LICENSE), [NOTICE.md](NOTICE.md) and [TRADEMARK.md](TRADEMARK.md).
+AGPL-3.0. See [LICENSE](LICENSE) and [NOTICE.md](NOTICE.md).

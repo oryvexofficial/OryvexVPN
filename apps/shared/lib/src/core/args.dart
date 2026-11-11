@@ -77,7 +77,7 @@ List<String> buildCoreArgs(
   // On Windows, Bypass can route the system proxy directly to its local HTTP forwarder.
   // Android's whole-device VPN handles traffic below the app proxy layer, so it does not need
   // this extra listener unless the user explicitly asked for one.
-  final wantHttp = s.httpProxy || (!android && (s.systemProxy || s.directOnly));
+  final wantHttp = s.hasHttpProxyListener(android: android);
   if (wantHttp) args.addAll(['--http-proxy', '$host:${s.httpPort}']);
 
   // Live traffic counters for the dashboard.

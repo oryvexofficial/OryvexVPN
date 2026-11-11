@@ -311,7 +311,7 @@ The `-v oryvexcore-data:/data` volume keeps the WARP identity across restarts. S
 docker run -it -p 127.0.0.1:1819:1819 -v oryvexcore-data:/data \
   -e ORYVEXCORE_PROTOCOL=masque \
   -e ORYVEXCORE_SCAN=balanced \
-  ghcr.io/owner/oryvexcore:latest
+  ghcr.io/oryvexofficial/oryvexvpn:latest
 ```
 *(The `-it` flag is necessary for interactive prompts if you do not provide the environment variables beforehand.)*
 

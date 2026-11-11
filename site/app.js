@@ -9,16 +9,11 @@
   var reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   // Old one-page links (index.html#download) still land on the right page.
-  var legacy = { about: 'about', how: 'guide', gui: 'app', docs: 'docs', creator: 'creator', download: 'download', tor: 'tor' };
+  var legacy = { about: 'about.html', how: 'guide.html', gui: 'app.html', docs: 'docs.html', creator: 'creator.html', download: 'download.html', tor: 'tor.html' };
   if (page === 'home' && location.hash && legacy[location.hash.slice(1)]) {
     location.replace(legacy[location.hash.slice(1)]);
     return;
   }
-  // Someone opened /download.html directly: show /download instead (GitHub Pages serves both).
-  if (/^https?:$/.test(location.protocol) && /\.html$/.test(location.pathname) && page !== '404' && history.replaceState) {
-    history.replaceState(null, '', location.pathname.replace(/(index)?\.html$/, '') + location.search + location.hash);
-  }
-
   var store = {
     get: function (k, s) { try { return (s || localStorage).getItem(k); } catch (e) { return null; } },
     set: function (k, v, s) { try { (s || localStorage).setItem(k, v); } catch (e) {} },

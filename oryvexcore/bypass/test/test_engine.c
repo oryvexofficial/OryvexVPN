@@ -4,6 +4,10 @@
  * technique is due to be checked again, and where a cut moves a host on to. */
 #include "../src/engine.c"
 #include <stdio.h>
+#ifndef _WIN32
+#include <sys/socket.h>
+#include <unistd.h>
+#endif
 
 static int fails = 0;
 #define CHECK(c) do{ if(!(c)){ printf("FAIL %s:%d %s\n", __FILE__, __LINE__, #c); fails++; } }while(0)
@@ -720,6 +724,71 @@ int main(void) {
     CHECK(http_forward_head(big, bl, out, sizeof(out), host, sizeof(host), &port) == -1);
   }
   printf("  plain http:// through the HTTP proxy port: rewritten, or refused: OK\n");
+
+#ifndef _WIN32
+  /* Protocol parsers are exercised only across local socketpairs. No outbound
+   * connection is made, even for a valid CONNECT/SOCKS request. */
+  {
+    int pair[2] = { -1, -1 };
+    socks_req rq;
+    char reply[128];
+    const uint8_t zero_methods[] = { 0x05, 0x00 };
+    CHECK(socketpair(AF_UNIX, SOCK_STREAM, 0, pair) == 0);
+    if (pair[0] >= 0 && pair[1] >= 0) {
+      CHECK(send(pair[1], zero_methods, sizeof(zero_methods), 0) == (ssize_t)sizeof(zero_methods));
+      CHECK(socks_accept(pair[0], &rq) == -1);
+      int n = (int)recv(pair[1], reply, sizeof(reply), 0);
+      CHECK(n == 2 && (uint8_t)reply[0] == 0x05 && (uint8_t)reply[1] == 0xFF);
+      close(pair[0]); close(pair[1]);
+    }
+  }
+  {
+    const uint8_t valid_socks[] = {
+      0x05, 0x01, 0x00,                 /* no-auth greeting */
+      0x05, 0x01, 0x00, 0x01,          /* CONNECT IPv4 */
+      127, 0, 0, 1, 0x01, 0xBB         /* 127.0.0.1:443 */
+    };
+    int pair[2] = { -1, -1 };
+    socks_req rq;
+    CHECK(socketpair(AF_UNIX, SOCK_STREAM, 0, pair) == 0);
+    if (pair[0] >= 0 && pair[1] >= 0) {
+      CHECK(send(pair[1], valid_socks, sizeof(valid_socks), 0) == (ssize_t)sizeof(valid_socks));
+      CHECK(socks_accept(pair[0], &rq) == 0);
+      CHECK(strcmp(rq.host, "127.0.0.1") == 0 && rq.port == 443);
+      close(pair[0]); close(pair[1]);
+    }
+  }
+  {
+    const char *good = "CONNECT example.com:443 HTTP/1.1\r\nHost: example.com\r\n\r\n";
+    const char *bad[] = {
+      "CONNECT example.com:443junk HTTP/1.1\r\n\r\n",
+      "CONNECT example.com:+443 HTTP/1.1\r\n\r\n",
+      "CONNECT example.com:-1 HTTP/1.1\r\n\r\n",
+      "CONNECT example.com: HTTP/1.1\r\n\r\n",
+      "CONNECT example.com:0 HTTP/1.1\r\n\r\n",
+      "CONNECT example.com:65536 HTTP/1.1\r\n\r\n",
+      "CONNECT example.com: 443 HTTP/1.1\r\n\r\n",
+    };
+    int pair[2] = { -1, -1 };
+    socks_req rq;
+    CHECK(socketpair(AF_UNIX, SOCK_STREAM, 0, pair) == 0);
+    if (pair[0] >= 0 && pair[1] >= 0) {
+      CHECK(send(pair[1], good, strlen(good), 0) == (ssize_t)strlen(good));
+      CHECK(socks_accept(pair[0], &rq) == 0);
+      CHECK(strcmp(rq.host, "example.com") == 0 && rq.port == 443);
+      close(pair[0]); close(pair[1]);
+    }
+    for (size_t i = 0; i < sizeof(bad) / sizeof(bad[0]); i++) {
+      pair[0] = pair[1] = -1;
+      CHECK(socketpair(AF_UNIX, SOCK_STREAM, 0, pair) == 0);
+      if (pair[0] < 0 || pair[1] < 0) continue;
+      CHECK(send(pair[1], bad[i], strlen(bad[i]), 0) == (ssize_t)strlen(bad[i]));
+      CHECK(socks_accept(pair[0], &rq) == -1);
+      close(pair[0]); close(pair[1]);
+    }
+  }
+  printf("  SOCKS5 and HTTP CONNECT framing/ports are strictly validated: OK\n");
+#endif
 
   if (fails == 0) { printf("ENGINE MEMORY TESTS PASSED\n"); return 0; }
   printf("%d FAILED\n", fails);

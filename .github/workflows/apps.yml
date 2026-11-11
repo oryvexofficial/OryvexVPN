@@ -196,6 +196,7 @@ jobs:
           for abi in arm64-v8a armeabi-v7a x86_64; do
             test -f "android/app/src/main/jniLibs/$abi/liboryvexcore_cli.so" || { echo "missing core for $abi"; exit 1; }
             test -f "android/app/src/main/jniLibs/$abi/liboryvex_bypass.so" || { echo "missing bypass engine for $abi"; exit 1; }
+            test -f "android/app/src/main/jniLibs/$abi/libhev-socks5-tunnel.so" || { echo "missing VPN tunnel engine for $abi"; exit 1; }
           done
           test -f android/app/src/main/java/hev/htproxy/TProxyService.java || { echo "missing hev-socks5-tunnel binding"; exit 1; }
           ls -l android/app/src/main/java/hev/htproxy/TProxyService.java

@@ -1,10 +1,13 @@
 import 'dart:io';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:oryvex_shared/src/core/args.dart';
+import 'package:oryvex_shared/src/core/backend.dart';
 import 'package:oryvex_shared/src/core/bypass_services.dart';
+import 'package:oryvex_shared/src/core/controller.dart';
 import 'package:oryvex_shared/src/core/log_line.dart';
 import 'package:oryvex_shared/src/core/route_about.dart';
 import 'package:oryvex_shared/src/core/settings.dart';
@@ -162,11 +165,13 @@ void main() {
     final s = CoreSettings()..protocol = 'bypass';
     final windows = buildCoreArgs(s, configPath: 'x', android: false);
     expect(windows, containsAll(['--http-proxy', '127.0.0.1:1820']));
+    expect(s.hasHttpProxyListener(android: false), isTrue);
     expect(s.portsInUse(android: false), {'SOCKS5': 1819, 'HTTP': 1820});
 
     // Android routes traffic through VpnService and must not bind the extra Windows listener.
     final android = buildCoreArgs(s, configPath: 'x', android: true);
     expect(android, isNot(contains('--http-proxy')));
+    expect(s.hasHttpProxyListener(android: true), isFalse);
     expect(s.portsInUse(android: true), {'SOCKS5': 1819});
   });
 
@@ -300,6 +305,49 @@ void main() {
     expect(isNewerVersion('2.0', '1.9.9+300'), isTrue);
   });
 
+  test('release tags accept only complete numeric versions', () {
+    ReleaseInfo? release(String tag) => ReleaseInfo.fromGitHub(jsonEncode({'tag_name': tag}));
+
+    for (final tag in ['v1', '1.2', 'v1.2.3', '2.3.4.5']) {
+      expect(release(tag)?.version, tag.replaceFirst(RegExp(r'^[vV]'), ''), reason: tag);
+    }
+    for (final tag in ['1.2.3junk', '1.2.3-rc1', '1.2.3+build', '1..2', '1.2.3.4.5']) {
+      expect(release(tag), isNull, reason: tag);
+    }
+  });
+
+  test('partial settings import is rejected without changing existing settings', () async {
+    final controller = CoreController(_TestBackend());
+    controller.settings
+      ..protocol = 'wg'
+      ..socksPort = 2222
+      ..darkTheme = false;
+    final before = controller.settings.toJson();
+
+    expect(await controller.importSettings('{"protocol":"mitm"}'), isFalse);
+    expect(controller.settings.toJson(), before);
+    controller.dispose();
+  });
+
+  test('settings import preserves all exported app behavior and update fields', () async {
+    SharedPreferences.setMockInitialValues({});
+    final imported = CoreSettings()
+      ..launchAtStartup = true
+      ..startInTray = false
+      ..skippedVersion = '9.8.7';
+    final controller = CoreController(_TestBackend());
+    controller.settings
+      ..launchAtStartup = false
+      ..startInTray = true
+      ..skippedVersion = '';
+
+    expect(await controller.importSettings(jsonEncode(imported.toJson())), isTrue);
+    expect(controller.settings.launchAtStartup, isTrue);
+    expect(controller.settings.startInTray, isFalse);
+    expect(controller.settings.skippedVersion, '9.8.7');
+    controller.dispose();
+  });
+
   test('app behaviour options round-trip and validate', () {
     final d = CoreSettings();
     expect(d.autoConnect, isFalse);
@@ -346,5 +394,40 @@ void main() {
       expect(s.note.trim(), isNotEmpty, reason: s.id);
     }
   });
+}
+
+class _TestBackend implements CoreBackend {
+  @override
+  Stream<BackendEvent> get events => const Stream<BackendEvent>.empty();
+
+  @override
+  bool get isAndroid => false;
+
+  @override
+  bool get supportsPsiphon => false;
+
+  @override
+  bool get supportsSystemProxy => false;
+
+  @override
+  bool get supportsVpn => false;
+
+  @override
+  String get platformLabel => 'test';
+
+  @override
+  Future<BackendStatus> status() async => const BackendStatus(running: false);
+
+  @override
+  Future<void> start(CoreSettings settings, int run) async {}
+
+  @override
+  Future<void> stop() async {}
+
+  @override
+  Future<String> installMitmCertificate() async => '';
+
+  @override
+  Future<void> shutdown() async {}
 }
 

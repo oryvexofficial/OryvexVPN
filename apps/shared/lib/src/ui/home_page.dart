@@ -805,7 +805,7 @@ class _RouteAndMode extends StatelessWidget {
     );
 
     final host = s.shareLan ? '0.0.0.0' : '127.0.0.1';
-    final showHttp = s.httpProxy || (c.backend.supportsSystemProxy && s.systemProxy);
+    final showHttp = s.hasHttpProxyListener(android: c.backend.isAndroid);
     final mode = OxTile(
       padding: const EdgeInsets.fromLTRB(4, 20, 4, 12),
       child: Column(

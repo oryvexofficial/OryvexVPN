@@ -145,6 +145,10 @@ class CoreSettings {
   /// Tor's exit choice is in play for this configuration.
   bool get usesTorExit => torOnly || chain == 'tor';
 
+  /// Whether the core starts its HTTP listener for the selected platform.
+  bool hasHttpProxyListener({required bool android}) =>
+      httpProxy || (!android && (systemProxy || directOnly));
+
   Map<String, dynamic> toJson() => {
         'protocol': protocol,
         'protocolVersion': _protocolVersion,
@@ -271,7 +275,7 @@ class CoreSettings {
   /// Every local port this configuration will bind, with what it is for.
   Map<String, int> portsInUse({required bool android}) {
     final ports = <String, int>{'SOCKS5': socksPort};
-    if (httpProxy || (!android && (systemProxy || directOnly))) ports['HTTP'] = httpPort;
+    if (hasHttpProxyListener(android: android)) ports['HTTP'] = httpPort;
     if (!noTunnel && chain == 'tor') ports['Tor'] = torPort;
     if (!noTunnel && chain == 'psiphon' && !android) ports['Psiphon'] = psiphonPort;
     return ports;

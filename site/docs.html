@@ -84,7 +84,7 @@ oryvexcore --masque --tor-reverse       <span class="c"># the tunnel through Tor
 <div class="note"><svg class="i" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg><p>The SOCKS5 proxy has no authentication. Publish it on <code>127.0.0.1</code> only, or anyone on your network can use your tunnel.</p></div>
 <pre><code>docker run -it -p 127.0.0.1:1819:1819 -v oryvexcore-data:/data \
   -e ORYVEXCORE_PROTOCOL=masque \
-  ghcr.io/owner/oryvexcore:latest</code></pre>
+  ghcr.io/oryvexofficial/oryvexvpn:latest</code></pre>
 </section>
 <section class="tile doc-sec" id="help"><div class="sec-h"><span class="ico"><svg class="i" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg></span><h2>Troubleshooting</h2></div>
 <div class="group" style="margin-bottom:16px">

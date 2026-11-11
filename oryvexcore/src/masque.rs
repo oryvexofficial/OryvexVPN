@@ -3,6 +3,7 @@ use std::net::Ipv4Addr;
 use octets::{Octets, OctetsMut};
 use quiche::h3;
 use rand::RngExt;
+use tokio::sync::mpsc;
 
 use crate::consts;
 use crate::error::{OryvexCoreError, Result};
@@ -152,6 +153,161 @@ pub fn strip_datagram_context(payload: &[u8]) -> Option<Vec<u8>> {
     }
 
     None
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum InboundQueueResult {
+    Enqueued,
+    Full,
+    Closed,
+}
+
+pub(crate) fn enqueue_inbound_packet(
+    sender: &mpsc::Sender<Vec<u8>>,
+    packet: Vec<u8>,
+) -> InboundQueueResult {
+    match sender.try_send(packet) {
+        Ok(()) => InboundQueueResult::Enqueued,
+        Err(mpsc::error::TrySendError::Full(_)) => InboundQueueResult::Full,
+        Err(mpsc::error::TrySendError::Closed(_)) => InboundQueueResult::Closed,
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct DnsQuestion {
+    id: u16,
+    opcode: u16,
+    name: Vec<u8>,
+    qtype: u16,
+    qclass: u16,
+}
+
+struct Ipv4UdpPacket<'a> {
+    source: [u8; 4],
+    destination: [u8; 4],
+    source_port: u16,
+    destination_port: u16,
+    payload: &'a [u8],
+}
+
+fn ipv4_udp_packet(packet: &[u8]) -> Option<Ipv4UdpPacket<'_>> {
+    if packet.len() < 20 || packet[0] >> 4 != 4 || packet[9] != 17 {
+        return None;
+    }
+    let header_len = ((packet[0] & 0x0f) as usize).checked_mul(4)?;
+    if header_len < 20 || header_len > packet.len() {
+        return None;
+    }
+    let total_len = u16::from_be_bytes(packet.get(2..4)?.try_into().ok()?) as usize;
+    if total_len < header_len + 8 || total_len > packet.len() {
+        return None;
+    }
+    let fragment = u16::from_be_bytes(packet.get(6..8)?.try_into().ok()?);
+    if fragment & 0x3fff != 0 {
+        return None;
+    }
+
+    let udp = packet.get(header_len..total_len)?;
+    let udp_len = u16::from_be_bytes(udp.get(4..6)?.try_into().ok()?) as usize;
+    if udp_len < 8 || udp_len != udp.len() {
+        return None;
+    }
+
+    Some(Ipv4UdpPacket {
+        source: packet.get(12..16)?.try_into().ok()?,
+        destination: packet.get(16..20)?.try_into().ok()?,
+        source_port: u16::from_be_bytes(udp.get(0..2)?.try_into().ok()?),
+        destination_port: u16::from_be_bytes(udp.get(2..4)?.try_into().ok()?),
+        payload: udp.get(8..)?,
+    })
+}
+
+fn dns_name(message: &[u8], start: usize) -> Option<(Vec<u8>, usize)> {
+    let mut name = Vec::new();
+    let mut position = start;
+    let mut consumed = None;
+
+    for _ in 0..128 {
+        let length = *message.get(position)?;
+        if length & 0xc0 == 0xc0 {
+            let second = *message.get(position + 1)?;
+            let pointer = (((length & 0x3f) as usize) << 8) | second as usize;
+            if pointer >= message.len() {
+                return None;
+            }
+            consumed.get_or_insert(position + 2);
+            position = pointer;
+            continue;
+        }
+        if length & 0xc0 != 0 {
+            return None;
+        }
+        position += 1;
+        if length == 0 {
+            return Some((name, consumed.unwrap_or(position)));
+        }
+
+        let label_len = length as usize;
+        let label = message.get(position..position.checked_add(label_len)?)?;
+        name.push(length);
+        name.extend(label.iter().map(u8::to_ascii_lowercase));
+        position += label_len;
+    }
+
+    None
+}
+
+fn dns_question(message: &[u8], expect_response: bool) -> Option<DnsQuestion> {
+    if message.len() < 12 {
+        return None;
+    }
+    let flags = u16::from_be_bytes(message.get(2..4)?.try_into().ok()?);
+    if (flags & 0x8000 != 0) != expect_response
+        || u16::from_be_bytes(message.get(4..6)?.try_into().ok()?) != 1
+    {
+        return None;
+    }
+
+    let (name, end) = dns_name(message, 12)?;
+    let qtype = u16::from_be_bytes(message.get(end..end.checked_add(2)?)?.try_into().ok()?);
+    let qclass = u16::from_be_bytes(message.get(end + 2..end + 4)?.try_into().ok()?);
+    Some(DnsQuestion {
+        id: u16::from_be_bytes(message.get(0..2)?.try_into().ok()?),
+        opcode: flags & 0x7800,
+        name,
+        qtype,
+        qclass,
+    })
+}
+
+/// True only when a DNS response matches the probe's IPv4/UDP endpoints and DNS question.
+/// Header fields that legitimately vary in a response (TTL, IP ID, checksums and DNS flags) are
+/// deliberately not compared byte-for-byte.
+pub(crate) fn is_correlated_dns_probe_response(probe: &[u8], response: &[u8]) -> bool {
+    let (Some(query_packet), Some(response_packet)) =
+        (ipv4_udp_packet(probe), ipv4_udp_packet(response))
+    else {
+        return false;
+    };
+    if response_packet.source != query_packet.destination
+        || response_packet.destination != query_packet.source
+        || response_packet.source_port != query_packet.destination_port
+        || response_packet.destination_port != query_packet.source_port
+    {
+        return false;
+    }
+
+    let (Some(query), Some(answer)) = (
+        dns_question(query_packet.payload, false),
+        dns_question(response_packet.payload, true),
+    ) else {
+        return false;
+    };
+    query.id == answer.id
+        && query.opcode == answer.opcode
+        && query.name == answer.name
+        && query.qtype == answer.qtype
+        && query.qclass == answer.qclass
 }
 
 fn looks_like_ip_packet(data: &[u8]) -> bool {
@@ -359,6 +515,23 @@ fn ipv4_header_checksum(header: &[u8]) -> u16 {
 mod tests {
     use super::*;
 
+    fn dns_probe_response(probe: &[u8]) -> Vec<u8> {
+        let mut response = probe.to_vec();
+        let source = response[12..16].to_vec();
+        let destination = response[16..20].to_vec();
+        response[12..16].copy_from_slice(&destination);
+        response[16..20].copy_from_slice(&source);
+
+        let source_port = response[20..22].to_vec();
+        let destination_port = response[22..24].to_vec();
+        response[20..22].copy_from_slice(&destination_port);
+        response[22..24].copy_from_slice(&source_port);
+
+        let dns = 20 + 8;
+        response[dns + 2..dns + 4].copy_from_slice(&0x8180u16.to_be_bytes());
+        response
+    }
+
     fn ip_packet() -> Vec<u8> {
         let mut pkt = vec![0u8; 24];
         pkt[0] = 0x45;
@@ -448,5 +621,69 @@ mod tests {
             .expect("h3 decoding")
             .expect("payload");
         assert_eq!(decoded, packet);
+    }
+
+    #[test]
+    fn inbound_queue_reports_only_successful_enqueues_as_delivered() {
+        let (tx, mut rx) = mpsc::channel(1);
+        assert_eq!(
+            enqueue_inbound_packet(&tx, vec![1]),
+            InboundQueueResult::Enqueued
+        );
+        assert_eq!(rx.try_recv().expect("queued packet"), vec![1]);
+
+        let (tx, _rx) = mpsc::channel(1);
+        tx.try_send(vec![0]).expect("fill queue");
+        assert_eq!(
+            enqueue_inbound_packet(&tx, vec![2]),
+            InboundQueueResult::Full
+        );
+
+        let (tx, rx) = mpsc::channel(1);
+        drop(rx);
+        assert_eq!(
+            enqueue_inbound_packet(&tx, vec![3]),
+            InboundQueueResult::Closed
+        );
+    }
+
+    #[test]
+    fn probe_success_requires_matching_framing_endpoints_and_dns_correlation() {
+        let probe = build_dns_probe_packet(Ipv4Addr::new(192, 0, 2, 2));
+        let response = dns_probe_response(&probe);
+        assert!(is_correlated_dns_probe_response(&probe, &response));
+
+        let mut wrong_id = response.clone();
+        wrong_id[28] ^= 0x01;
+        assert!(!is_correlated_dns_probe_response(&probe, &wrong_id));
+
+        let mut wrong_question = response.clone();
+        wrong_question[41] ^= 0x01;
+        assert!(!is_correlated_dns_probe_response(&probe, &wrong_question));
+
+        let mut wrong_port = response.clone();
+        wrong_port[22] ^= 0x01;
+        assert!(!is_correlated_dns_probe_response(&probe, &wrong_port));
+
+        let mut unrelated = response.clone();
+        unrelated[9] = 6;
+        assert!(!is_correlated_dns_probe_response(&probe, &unrelated));
+    }
+
+    #[test]
+    fn probe_framing_rejects_unrelated_h3_and_h2_contexts() {
+        let probe = build_dns_probe_packet(Ipv4Addr::new(192, 0, 2, 2));
+        let response = dns_probe_response(&probe);
+        let valid = encode_ip_datagram(8, &response).expect("h3 framing");
+        let decoded = decode_ip_datagram(&valid, 8)
+            .expect("decode")
+            .expect("matching stream and context");
+        assert!(is_correlated_dns_probe_response(&probe, &decoded));
+
+        let wrong_stream = encode_ip_datagram(12, &response).expect("h3 framing");
+        assert_eq!(decode_ip_datagram(&wrong_stream, 8).unwrap(), None);
+
+        let wrong_context = [1u8].into_iter().chain(response).collect::<Vec<_>>();
+        assert_eq!(strip_datagram_context(&wrong_context), None);
     }
 }

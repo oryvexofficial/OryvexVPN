@@ -339,7 +339,17 @@ pub async fn verify_h2(cfg: &H2TunnelConfig, timeout: Duration) -> Result<Durati
                             capsules.push(&chunk);
                             loop {
                                 match capsules.next() {
-                                    Ok(Some(Capsule::Datagram(_))) => {
+                                    Ok(Some(Capsule::Datagram(payload))) => {
+                                        let Some(response) = masque::strip_datagram_context(&payload)
+                                        else {
+                                            continue;
+                                        };
+                                        if !masque::is_correlated_dns_probe_response(
+                                            &probe,
+                                            &response,
+                                        ) {
+                                            continue;
+                                        }
                                         probe_successes += 1;
                                         if probe_successes >= DATA_PROBE_REQUIRED_SUCCESSES {
                                             return Ok(());
@@ -619,7 +629,12 @@ pub async fn run(
                     Some(Ok(chunk)) => {
                         let _ = recv_body.flow_control().release_capacity(chunk.len());
                         capsules.push(&chunk);
-                        let got_data = drain_capsules(&mut capsules, &inbound_tx, &addr_tx);
+                        let got_data = drain_capsules(
+                            &mut capsules,
+                            &inbound_tx,
+                            &probe_packet,
+                            &addr_tx,
+                        );
                         if got_data && !ready_fired {
                             validate_successes += 1;
                             log::debug!(
@@ -740,6 +755,7 @@ async fn send_capsule(send: &mut h2::SendStream<Bytes>, data: Bytes) -> Result<(
 fn drain_capsules(
     capsules: &mut CapsuleParser,
     inbound_tx: &mpsc::Sender<Vec<u8>>,
+    probe_packet: &[u8],
     addr_tx: &Option<mpsc::Sender<AssignedAddr>>,
 ) -> bool {
     let mut delivered = false;
@@ -753,13 +769,13 @@ fn drain_capsules(
                         continue;
                     }
                 };
-                delivered = true;
-                match inbound_tx.try_send(pkt) {
-                    Ok(()) => {}
-                    Err(mpsc::error::TrySendError::Full(_)) => {
+                let is_probe = masque::is_correlated_dns_probe_response(probe_packet, &pkt);
+                match masque::enqueue_inbound_packet(inbound_tx, pkt) {
+                    masque::InboundQueueResult::Enqueued => delivered |= is_probe,
+                    masque::InboundQueueResult::Full => {
                         log::trace!("[h2] inbound queue full, dropping datagram");
                     }
-                    Err(mpsc::error::TrySendError::Closed(_)) => return delivered,
+                    masque::InboundQueueResult::Closed => return delivered,
                 }
             }
             Ok(Some(Capsule::AddressAssign(addrs))) => {

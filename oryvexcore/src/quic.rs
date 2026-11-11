@@ -502,7 +502,13 @@ pub async fn run(
             poll_h3(&mut conn, h3c, sid, &mut capsules, &addr_tx, quiet)?;
         }
 
-        let got_data = drain_datagrams(&mut conn, req_stream, &internals.inbound_tx, &mut out_buf);
+        let got_data = drain_datagrams(
+            &mut conn,
+            req_stream,
+            &internals.inbound_tx,
+            &probe_packet,
+            &mut out_buf,
+        );
 
         if got_data && !ready_fired {
             validate_successes += 1;
@@ -703,6 +709,7 @@ fn drain_datagrams(
     conn: &mut quiche::Connection,
     req_stream: Option<u64>,
     inbound_tx: &mpsc::Sender<Vec<u8>>,
+    probe_packet: &[u8],
     buf: &mut [u8],
 ) -> bool {
     let sid = match req_stream {
@@ -715,13 +722,14 @@ fn drain_datagrams(
         match conn.dgram_recv(buf) {
             Ok(n) => match masque::decode_ip_datagram(&buf[..n], sid) {
                 Ok(Some(ip_packet)) => {
-                    delivered = true;
-                    match inbound_tx.try_send(ip_packet) {
-                        Ok(()) => {}
-                        Err(mpsc::error::TrySendError::Full(_)) => {
+                    let is_probe =
+                        masque::is_correlated_dns_probe_response(probe_packet, &ip_packet);
+                    match masque::enqueue_inbound_packet(inbound_tx, ip_packet) {
+                        masque::InboundQueueResult::Enqueued => delivered |= is_probe,
+                        masque::InboundQueueResult::Full => {
                             log::trace!("inbound queue full, dropping datagram");
                         }
-                        Err(mpsc::error::TrySendError::Closed(_)) => return delivered,
+                        masque::InboundQueueResult::Closed => return delivered,
                     }
                 }
                 Ok(None) => {}
@@ -993,15 +1001,24 @@ pub async fn verify_masque(p: &VerifyParams) -> Result<Duration> {
                 loop {
                     match conn.dgram_recv(&mut dgram_buf) {
                         Ok(n) => {
-                            if let Ok(Some(_)) = masque::decode_ip_datagram(&dgram_buf[..n], sid) {
-                                probe_successes += 1;
-                                if probe_successes >= DATA_PROBE_REQUIRED_SUCCESSES {
-                                    return Ok(start.elapsed());
+                            if let Ok(Some(response)) =
+                                masque::decode_ip_datagram(&dgram_buf[..n], sid)
+                            {
+                                if masque::is_correlated_dns_probe_response(
+                                    &probe_packet,
+                                    &response,
+                                ) {
+                                    probe_successes += 1;
+                                    if probe_successes >= DATA_PROBE_REQUIRED_SUCCESSES {
+                                        return Ok(start.elapsed());
+                                    }
+                                    if let Ok(framed) =
+                                        masque::encode_ip_datagram(sid, &probe_packet)
+                                    {
+                                        let _ = conn.dgram_send(&framed);
+                                    }
+                                    last_probe = Instant::now();
                                 }
-                                if let Ok(framed) = masque::encode_ip_datagram(sid, &probe_packet) {
-                                    let _ = conn.dgram_send(&framed);
-                                }
-                                last_probe = Instant::now();
                             }
                         }
                         Err(quiche::Error::Done) => break,

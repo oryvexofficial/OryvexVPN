@@ -568,7 +568,10 @@ class CoreController extends ChangeNotifier {
   Future<bool> importSettings(String raw) async {
     try {
       final decoded = jsonDecode(raw.trim());
-      if (decoded is! Map<String, dynamic> || !decoded.containsKey('protocol')) return false;
+      if (decoded is! Map<String, dynamic> ||
+          !decoded.keys.toSet().containsAll(CoreSettings().toJson().keys)) {
+        return false;
+      }
       final loaded = CoreSettings.fromJson(decoded);
       await updateSettings((s) {
         final j = loaded.toJson();
@@ -604,8 +607,11 @@ class CoreController extends ChangeNotifier {
         s.extraArgs = next.extraArgs;
         s.autoConnect = next.autoConnect;
         s.autoReconnect = next.autoReconnect;
+        s.launchAtStartup = next.launchAtStartup;
+        s.startInTray = next.startInTray;
         s.closeAction = next.closeAction;
         s.checkUpdates = next.checkUpdates;
+        s.skippedVersion = next.skippedVersion;
         s.keepHistory = next.keepHistory;
       });
       return true;

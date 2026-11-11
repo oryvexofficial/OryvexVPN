@@ -80,7 +80,7 @@ impl TryFrom<PersistedIdentity> for Identity {
         let client_id = if p.client_id.is_empty() {
             [0u8; 3]
         } else {
-            decode_fixed::<3>("client_id", &p.client_id).unwrap_or([0u8; 3])
+            decode_fixed::<3>("client_id", &p.client_id)?
         };
 
         Ok(Identity {
@@ -424,6 +424,35 @@ wg_peer_public_key = \"AAAA\"
         std::fs::write(&path, body).expect("write");
 
         assert!(load(path_str).is_err());
+    }
+
+    #[test]
+    fn a_malformed_nonempty_client_id_is_rejected_and_quarantined() {
+        let dir = scratch("badclientid");
+        let path = dir.join("oryvexcore.toml");
+        let path_str = path.to_str().unwrap();
+
+        save(path_str, &sample()).expect("save");
+        let text = std::fs::read_to_string(&path).expect("read saved config");
+        let damaged = text.replace("client_id = \"AQID\"", "client_id = \"not-base64\"");
+        assert_ne!(damaged, text, "the fixture must replace the saved client_id");
+        std::fs::write(&path, damaged).expect("write damaged config");
+
+        assert!(load(path_str).is_err(), "malformed client_id must fail loading");
+        assert!(!path.exists(), "the malformed file should be moved aside");
+        assert!(
+            dir.join("oryvexcore.toml.corrupt").exists(),
+            "the malformed file should be quarantined"
+        );
+    }
+
+    #[test]
+    fn an_explicitly_empty_legacy_client_id_still_defaults_to_zeroes() {
+        let mut persisted = PersistedIdentity::from(&sample());
+        persisted.client_id.clear();
+
+        let loaded = Identity::try_from(persisted).expect("empty legacy field remains supported");
+        assert_eq!(loaded.client_id, [0u8; 3]);
     }
 
     #[test]

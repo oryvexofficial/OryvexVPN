@@ -89,7 +89,7 @@ class ReleaseInfo {
       final tag = j['tag_name'];
       if (tag is! String) return null;
       final version = tag.trim().replaceFirst(RegExp(r'^[vV]'), '');
-      if (!RegExp(r'^\d+(\.\d+){0,3}').hasMatch(version)) return null;
+      if (!RegExp(r'^\d+(\.\d+){0,3}$').hasMatch(version)) return null;
       final name = j['name'];
       final notes = j['body'];
       final page = j['html_url'];

@@ -586,7 +586,7 @@ oryvexcore --masque --tor-reverse       <span class="c"># the tunnel through Tor
 <div class="note">{{i:alert}}<p>The SOCKS5 proxy has no authentication. Publish it on <code>127.0.0.1</code> only, or anyone on your network can use your tunnel.</p></div>
 <pre><code>docker run -it -p 127.0.0.1:1819:1819 -v oryvexcore-data:/data \\
   -e ORYVEXCORE_PROTOCOL=masque \\
-  ghcr.io/owner/oryvexcore:latest</code></pre>
+  ghcr.io/oryvexofficial/oryvexvpn:latest</code></pre>
 </section>
 <section class="tile doc-sec" id="help">''' + sec("alert", "Troubleshooting") + '''
 <div class="group" style="margin-bottom:16px">
@@ -633,16 +633,23 @@ bash oryvexcore.sh</code></pre>
 # on a project site that is /<repo>/, on a custom domain or user site it is /.
 ROOT_SCRIPT = """<script>(function(){
 var seg=location.pathname.split('/')[1]||'';
+var routePages={about:1,app:1,creator:1,docs:1,download:1,guide:1,tor:1};
 function apply(root){
   var a=document.querySelectorAll('[data-href]');
   for(var k=0;k<a.length;k++){a[k].setAttribute('href',root+a[k].getAttribute('data-href'));}
   var css=document.createElement('link');css.rel='stylesheet';css.href=root+'style.css';document.head.appendChild(css);
-  var ico=document.createElement('link');ico.rel='icon';ico.type='image/svg+xml';ico.href=root+'assets/mark.svg';document.head.appendChild(ico);
+  var ico=document.createElement('link');ico.rel='icon';ico.type='image/svg+xml';ico.href=root+'assets/logo.svg';document.head.appendChild(ico);
   var js=document.createElement('script');js.src=root+'app.js';document.body.appendChild(js);
 }
 function ready(f){document.readyState==='loading'?document.addEventListener('DOMContentLoaded',f):f();}
-if(!seg||seg.indexOf('.')>-1){ready(function(){apply('/');});return;}
-var done=false;function go(r){if(done)return;done=true;ready(function(){apply(r);});}
+if(!seg){ready(function(){apply('/');});return;}
+var done=false;function go(r){
+  if(done)return;done=true;
+  var relative=r==='/'?location.pathname.replace(/^\\/+/, ''):location.pathname.slice(r.length);
+  var slug=relative.replace(/^\\/+|\\/+$/g,'');
+  if(routePages[slug]){location.replace(r+slug+'.html'+location.search+location.hash);return;}
+  ready(function(){apply(r);});
+}
 try{fetch('/'+seg+'/app.js',{method:'HEAD',cache:'no-store'}).then(function(r){go(r.ok?'/'+seg+'/':'/');},function(){go('/');});}catch(e){go('/');}
 setTimeout(function(){go('/');},2500);
 })();</script>
@@ -661,9 +668,9 @@ PAGES["404.html"] = ("404", "Page not found",
 
 
 def clean_links(html):
-    """download.html -> download, index.html -> ./  (GitHub Pages serves /download from download.html)."""
+    """Keep explicit static-page filenames; only the site's root maps to index.html."""
     html = re.sub(r'href="index\.html(#[^"]*)?"', lambda m: 'href="./' + (m.group(1) or '') + '"', html)
-    return re.sub(r'href="([a-z0-9-]+)\.html(#[^"]*)?"', lambda m: f'href="{m.group(1)}{m.group(2) or ""}"', html)
+    return html
 
 
 def make_404(html, css, mark):
