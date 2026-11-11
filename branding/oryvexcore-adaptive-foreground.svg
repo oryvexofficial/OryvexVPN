@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <title>OryvexVPN adaptive foreground</title>
+  <!-- Android adaptive-icon foreground (108dp). Sits on the #0A6CFF background colour; mark stays inside the 66dp safe zone. -->
+  <path d="M323.66,246.34 A75.24000000000001,75.24000000000001 0 1,1 265.66,188.34" fill="none" stroke="#FFFFFF" stroke-width="36.96" stroke-linecap="round"/><circle cx="323.80" cy="188.20" r="21.12" fill="#FFFFFF"/>
+</svg>

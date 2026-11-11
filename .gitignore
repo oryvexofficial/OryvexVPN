@@ -1,0 +1,52 @@
+target/
+**/target/
+*.zip
+*.tar.gz
+.DS_Store
+.idea/
+.vscode/
+
+# OryvexCore identity / credential files: contain the WireGuard private key,
+# MASQUE client certificate + key, and Cloudflare API access token.
+# Never commit these.
+oryvexcore.toml
+oryvexcore-*.toml
+oryvexcore-masque.toml
+oryvexcore-lastconn.toml
+oryvexcore-masque-lastconn.toml
+*-secondary.toml
+*-lastconn.toml
+*.toml.corrupt
+.*.toml.*.tmp
+*.pem
+*.key
+
+# Zero Trust routing rule files may name internal hosts.
+routes.conf
+routes-*.conf
+
+# Tor keeps its directory cache, guard state and fetched bridges here.
+# Large, machine-local and rebuilt on demand.
+*-tor/
+
+# Pluggable transport binaries put here by pt-build.sh. The release archives
+# carry their own, built for the target they ship to.
+pt/
+
+# quiche's own test certificates are part of the vendored source.
+!quiche/**/*.key
+!quiche/**/*.pem
+apps/desktop-lite-src/target/
+
+# Flutter (apps/shared, apps/desktop-src, apps/android-src)
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+build/
+pubspec.lock
+apps/android-src/android/local.properties
+apps/android-src/android/key.properties
+apps/android-src/android/.gradle/
+apps/android-src/android/app/src/main/jniLibs/
+apps/desktop-src/windows/flutter/ephemeral/
+apps/desktop-src/core-bundle/
