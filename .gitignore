@@ -19,6 +19,8 @@ oryvexcore-masque-lastconn.toml
 *.toml.corrupt
 .*.toml.*.tmp
 *.pem
+# Bundled root store compiled into oryvexcore via include_str!.
+!oryvexcore/src/mitm_roots.pem
 *.key
 
 # Zero Trust routing rule files may name internal hosts.

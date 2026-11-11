@@ -243,15 +243,18 @@ fn make_ca() -> Result<(X509, PKey<Private>)> {
     let name = subject("OryvexVPN MITM CA (this device only)")?;
     let mut b = boring::x509::X509Builder::new().map_err(tls_err)?;
     b.set_version(2).map_err(tls_err)?;
-    b.set_serial_number(&serial()?).map_err(tls_err)?;
+    let sn = serial()?;
+    b.set_serial_number(&sn).map_err(tls_err)?;
     b.set_subject_name(&name).map_err(tls_err)?;
     b.set_issuer_name(&name).map_err(tls_err)?;
-    b.set_not_before(&Asn1Time::from_unix(unix_now() - 86_400).map_err(tls_err)?).map_err(tls_err)?;
-    b.set_not_after(&Asn1Time::days_from_now(3650).map_err(tls_err)?).map_err(tls_err)?;
+    let nb = Asn1Time::from_unix(unix_now() - 86_400).map_err(tls_err)?;
+    b.set_not_before(&nb).map_err(tls_err)?;
+    let na = Asn1Time::days_from_now(3650).map_err(tls_err)?;
+    b.set_not_after(&na).map_err(tls_err)?;
     b.set_pubkey(&key).map_err(tls_err)?;
-    b.append_extension(BasicConstraints::new().critical().ca().build().map_err(tls_err)?)
+    b.append_extension(&BasicConstraints::new().critical().ca().build().map_err(tls_err)?)
         .map_err(tls_err)?;
-    b.append_extension(KeyUsage::new().critical().key_cert_sign().crl_sign().build().map_err(tls_err)?)
+    b.append_extension(&KeyUsage::new().critical().key_cert_sign().crl_sign().build().map_err(tls_err)?)
         .map_err(tls_err)?;
     b.sign(&key, MessageDigest::sha256()).map_err(tls_err)?;
     Ok((b.build(), key))
@@ -318,16 +321,19 @@ impl Authority {
         let name = subject(&host)?;
         let mut b = boring::x509::X509Builder::new().map_err(tls_err)?;
         b.set_version(2).map_err(tls_err)?;
-        b.set_serial_number(&serial()?).map_err(tls_err)?;
+        let sn = serial()?;
+        b.set_serial_number(&sn).map_err(tls_err)?;
         b.set_subject_name(&name).map_err(tls_err)?;
         b.set_issuer_name(self.ca_cert.subject_name()).map_err(tls_err)?;
-        b.set_not_before(&Asn1Time::from_unix(unix_now() - 86_400).map_err(tls_err)?).map_err(tls_err)?;
-        b.set_not_after(&Asn1Time::days_from_now(90).map_err(tls_err)?).map_err(tls_err)?;
+        let nb = Asn1Time::from_unix(unix_now() - 86_400).map_err(tls_err)?;
+    b.set_not_before(&nb).map_err(tls_err)?;
+        let na = Asn1Time::days_from_now(90).map_err(tls_err)?;
+        b.set_not_after(&na).map_err(tls_err)?;
         b.set_pubkey(&self.leaf_key).map_err(tls_err)?;
-        b.append_extension(BasicConstraints::new().build().map_err(tls_err)?).map_err(tls_err)?;
-        b.append_extension(KeyUsage::new().critical().digital_signature().build().map_err(tls_err)?)
+        b.append_extension(&BasicConstraints::new().build().map_err(tls_err)?).map_err(tls_err)?;
+        b.append_extension(&KeyUsage::new().critical().digital_signature().build().map_err(tls_err)?)
             .map_err(tls_err)?;
-        b.append_extension(ExtendedKeyUsage::new().server_auth().build().map_err(tls_err)?)
+        b.append_extension(&ExtendedKeyUsage::new().server_auth().build().map_err(tls_err)?)
             .map_err(tls_err)?;
         let san = {
             let ctx = b.x509v3_context(Some(&*self.ca_cert), None);
@@ -339,7 +345,7 @@ impl Authority {
             }
             s.build(&ctx).map_err(tls_err)?
         };
-        b.append_extension(san).map_err(tls_err)?;
+        b.append_extension(&san).map_err(tls_err)?;
         b.sign(&self.ca_key, MessageDigest::sha256()).map_err(tls_err)?;
         let cert = b.build();
         let mut cache = self.cache.lock().map_err(|_| other("certificate cache poisoned"))?;
@@ -736,7 +742,7 @@ struct Ctx {
     warned_cert: Mutex<Option<Instant>>,
 }
 
-async fn handle_client(mut sock: TcpStream, ctx: Arc<Ctx>) {
+async fn handle_client(sock: TcpStream, ctx: Arc<Ctx>) {
     let _ = sock.set_nodelay(true);
     let mut first = [0u8; 1];
     let Ok(Ok(n)) = tokio::time::timeout(Duration::from_secs(15), sock.peek(&mut first)).await else {

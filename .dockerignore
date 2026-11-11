@@ -16,6 +16,7 @@ branding/
 *.pem
 *.key
 oryvexcore/**/*.pem
+!oryvexcore/src/mitm_roots.pem
 oryvexcore/**/*.key
 **/routes.conf
 **/routes-*.conf
