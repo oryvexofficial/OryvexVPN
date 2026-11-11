@@ -252,10 +252,10 @@ fn make_ca() -> Result<(X509, PKey<Private>)> {
     let na = Asn1Time::days_from_now(3650).map_err(tls_err)?;
     b.set_not_after(&na).map_err(tls_err)?;
     b.set_pubkey(&key).map_err(tls_err)?;
-    b.append_extension(&BasicConstraints::new().critical().ca().build().map_err(tls_err)?)
-        .map_err(tls_err)?;
-    b.append_extension(&KeyUsage::new().critical().key_cert_sign().crl_sign().build().map_err(tls_err)?)
-        .map_err(tls_err)?;
+    let ext1: boring::x509::X509Extension = BasicConstraints::new().critical().ca().build().map_err(tls_err)?;
+    b.append_extension(&ext1).map_err(tls_err)?;
+    let ext2: boring::x509::X509Extension = KeyUsage::new().critical().key_cert_sign().crl_sign().build().map_err(tls_err)?;
+    b.append_extension(&ext2).map_err(tls_err)?;
     b.sign(&key, MessageDigest::sha256()).map_err(tls_err)?;
     Ok((b.build(), key))
 }
@@ -330,11 +330,12 @@ impl Authority {
         let na = Asn1Time::days_from_now(90).map_err(tls_err)?;
         b.set_not_after(&na).map_err(tls_err)?;
         b.set_pubkey(&self.leaf_key).map_err(tls_err)?;
-        b.append_extension(&BasicConstraints::new().build().map_err(tls_err)?).map_err(tls_err)?;
-        b.append_extension(&KeyUsage::new().critical().digital_signature().build().map_err(tls_err)?)
-            .map_err(tls_err)?;
-        b.append_extension(&ExtendedKeyUsage::new().server_auth().build().map_err(tls_err)?)
-            .map_err(tls_err)?;
+        let ext3: boring::x509::X509Extension = BasicConstraints::new().build().map_err(tls_err)?;
+        b.append_extension(&ext3).map_err(tls_err)?;
+        let ext4: boring::x509::X509Extension = KeyUsage::new().critical().digital_signature().build().map_err(tls_err)?;
+        b.append_extension(&ext4).map_err(tls_err)?;
+        let ext5: boring::x509::X509Extension = ExtendedKeyUsage::new().server_auth().build().map_err(tls_err)?;
+        b.append_extension(&ext5).map_err(tls_err)?;
         let san = {
             let ctx = b.x509v3_context(Some(&*self.ca_cert), None);
             let mut s = SubjectAlternativeName::new();
