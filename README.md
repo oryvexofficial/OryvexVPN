@@ -137,6 +137,5 @@ chmod +x oryvexcore.sh && ./oryvexcore.sh install
 
 Created by **Muvixo**. MASQUE is built on Cloudflare's **quiche**. Fonts: Inter and JetBrains Mono (SIL OFL 1.1, see `apps/shared/fonts/OFL.txt`).
 
-Donations: TRX `TRxVSHcoADZnBfztFmFb2TQopusAwWYEVR` · BTC `bc1qnjnvzsa5avgj7n0uy383cv5zdxfjnvvp257egm` · TON `UQAH75bXaaRUhZMwiF0ZujOXFDDmvLSPASKoOsWF0HNasiaM`
 
 AGPL-3.0. See [LICENSE](LICENSE), [NOTICE.md](NOTICE.md) and [TRADEMARK.md](TRADEMARK.md).

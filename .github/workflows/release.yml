@@ -617,7 +617,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-    if: ${{ always() && startsWith(github.ref, 'refs/tags/') }}
+    if: ${{ always() && !cancelled() && startsWith(github.ref, 'refs/tags/') }}
     steps:
       - name: Download CLI artifacts
         uses: actions/download-artifact@v4
@@ -638,6 +638,7 @@ jobs:
           cd dist
           shopt -s nullglob
           files=(*.tar.gz *.zip *.apk *.exe)
+          if [ ${#files[@]} -eq 0 ]; then echo "::error::No build produced a file, nothing to release"; exit 1; fi
           for f in "${files[@]}"; do
             sha256sum "$f" > "$f.sha256"
           done

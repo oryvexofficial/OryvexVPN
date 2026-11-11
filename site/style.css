@@ -411,8 +411,8 @@ pre:hover .copy,pre .copy:focus-visible{opacity:1}
 .doc-sec li{margin:6px 0}
 .doc-sec>p.muted{max-width:760px}
 
-.wallet{display:flex;flex-wrap:wrap;align-items:center;gap:12px}
-.wallet code{font-size:15px;background:none;border:0;padding:0;color:var(--text);word-break:break-all}
+
+
 
 .lost{min-height:calc(100vh - 220px);display:grid;place-items:center;text-align:center}
 .lost .orb{width:min(220px,56vw);cursor:default;margin:0 auto 10px}

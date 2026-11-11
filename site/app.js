@@ -173,7 +173,7 @@
   var KEY = 'ox-demo';
   var pad = function (n) { return (n < 10 ? '0' : '') + n; };
   var clock = function (ms) { var s = Math.max(0, Math.floor(ms / 1000)); return pad(Math.floor(s / 3600)) + ':' + pad(Math.floor(s / 60) % 60) + ':' + pad(s % 60); };
-  var NAMES = { auto: 'Auto', wg: 'WireGuard', masque: 'MASQUE', mim: 'MASQUE\u00b2', gool: 'Gool', tor: 'Tor' };
+  var NAMES = { auto: 'Auto', wg: 'WireGuard', masque: 'MASQUE', mim: 'MASQUE\u00b2', gool: 'Gool', tor: 'Tor', bypass: 'Bypass' };
   var saved = function () { try { return JSON.parse(store.get(KEY, session) || 'null'); } catch (e) { return null; } };
   var sidePill = $('#side-pill'), sideLine = $('#side-line'), sideBtn = $('#side-btn');
   var side = function (s, line, btn) {
@@ -217,9 +217,10 @@
       masque: 'Use an HTTP/3 or HTTP/2 tunnel that blends in with regular HTTPS traffic.',
       mim: 'Carry MASQUE inside MASQUE to use a different exit address.',
       gool: 'Carry WireGuard inside MASQUE to use a different exit address.',
+      bypass: 'Go out directly and reshape the first packets of each connection so filters cannot read the site name. Your address does not change.',
       tor: 'Connect directly to Tor, using bridges when needed. Pick an exit country on the Tor page.'
     };
-    var GW = { auto: '162.159.192.7:2408', wg: '162.159.192.7:2408', masque: '162.159.198.1:443', mim: '162.159.198.2:443', gool: '162.159.198.1:443', tor: '3 hops \u00b7 auto exit' };
+    var GW = { auto: '162.159.192.7:2408', wg: '162.159.192.7:2408', masque: '162.159.198.1:443', mim: '162.159.198.2:443', gool: '162.159.198.1:443', tor: '3 hops \u00b7 auto exit', bypass: 'Direct \u00b7 no tunnel' };
     var carried = function (p) { return p === 'masque' || p === 'mim' || p === 'gool'; };
     var want = { proto: 'auto', carrier: 'h2' }, live = null;
     var state = 'off', timers = [], since = 0, loop = null;
@@ -271,6 +272,10 @@
         { t: 'Pick an exit', idle: 'Auto', done: 'Tor\u2019s own pick', logs: [['*', 'tor exit: auto, weighted by bandwidth']] },
         { t: 'Verify the route', idle: 'Checking HTTPS\u2026', done: 'HTTPS 200 \u00b7 640 ms', logs: [['+', 'route validated in 640 ms']] },
         proxy];
+      if (p === 'bypass') return [
+        { t: 'Start the bypass engine', idle: 'Launching\u2026', done: 'Engine running', logs: [['*', 'starting the bypass engine from oryvex-bypass']] },
+        { t: 'Choose a technique', idle: 'Trying per site\u2026', done: 'fake(ttl=4), split(sni)', logs: [['*', 'resolving names with the engine\u2019s own DoH resolver'], ['+', 'strategy kept: fake(ttl=4), split(sni)']] },
+        { t: 'Proxy ready', idle: 'SOCKS5 on port 1819', done: 'SOCKS5 on port 1819', logs: [['+', 'bypass is ready; 127.0.0.1:1819 reaches the internet directly']] }];
       var scan = { t: 'Find an endpoint', idle: 'Scanning\u2026', logs: [] };
       if (p === 'auto' || p === 'wg') {
         scan.done = '162.159.192.7 \u00b7 48 ms';
@@ -290,11 +295,13 @@
       var h = c === 'h3' ? 'HTTP/3' : 'HTTP/2';
       if (p === 'auto') return 'Auto \u00b7 WireGuard (1 of 4)';
       if (p === 'tor') return 'Tor \u00b7 auto exit';
+      if (p === 'bypass') return 'Bypass \u00b7 direct, packets reshaped';
       return NAMES[p] + (carried(p) ? ' over ' + h : '');
     };
     var restText = function (p, c) {
       if (p === 'auto') return panel.clientWidth < 480 ? 'Auto: four routes, in order' : 'Auto: WireGuard \u203a MASQUE \u203a MASQUE\u00b2 \u203a Gool';
       if (p === 'tor') return 'Tor \u00b7 auto exit \u00b7 bridges when needed';
+      if (p === 'bypass') return 'Bypass \u00b7 direct, packets reshaped';
       return routeText(p, c) + '  \u00b7  Balanced scan';
     };
 
@@ -350,7 +357,7 @@
       el.routeHint.textContent = HINTS[p];
       var shown = live ? live.proto : p;
       el.chip.innerHTML = '<img class="proto" src="assets/protocols/' + shown + '.svg" alt="" width="20" height="20"><span>' + NAMES[shown] + '</span>';
-      el.cmd.textContent = p === 'tor' ? 'oryvexcore --tor-only --tor-exit auto' : 'oryvexcore --protocol ' + p + ' --scan balanced' + (carried(p) ? (c === 'h3' ? ' --h3' : ' --h2') : '');
+      el.cmd.textContent = p === 'tor' ? 'oryvexcore --tor-only --tor-exit auto' : p === 'bypass' ? 'oryvexcore --bypass' : 'oryvexcore --protocol ' + p + ' --scan balanced' + (carried(p) ? (c === 'h3' ? ' --h3' : ' --h2') : '');
       el.dirty.hidden = !(live && (live.proto !== p || live.carrier !== c) && state !== 'off');
       if (state === 'off') draw();
     };

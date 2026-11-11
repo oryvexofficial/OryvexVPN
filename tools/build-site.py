@@ -229,7 +229,7 @@ def stat(ic, label, vid, value, sid, sub, spark=False, mono=False):
     return f'<div class="tile stat"><div class="stat-h"><span class="ico">{{{{i:{ic}}}}}</span>{label}</div><div class="{cls}" id="{vid}">{value}</div>{sp}<div class="stat-s" id="{sid}">{sub}</div></div>'
 
 PROTOS = [("auto", "auto", "Auto"), ("wg", "wg", "WireGuard"), ("masque", "masque", "MASQUE"),
-          ("mim", "mim", "MASQUE²"), ("gool", "gool", "Gool"), ("tor", "tor", "Tor")]
+          ("mim", "mim", "MASQUE²"), ("gool", "gool", "Gool"), ("tor", "tor", "Tor"), ("bypass", "bypass", "Bypass")]
 
 PAGES = {}
 
@@ -568,14 +568,7 @@ head("Creator", "Made by Muvixo.", "Free software under the AGPL-3.0. MASQUE on 
 <a class="row" href="@REPO@/blob/main/LICENSE"><span class="ico">{{i:book}}</span><div class="row-main"><div class="row-t">License</div><div class="row-s">AGPL-3.0. Third-party notices ship with every build.</div></div>{{i:chev chev}}</a>
 <div class="row"><span class="ico">{{i:layers}}</span><div class="row-main"><div class="row-t">Built on</div><div class="row-s">quiche for MASQUE, Arti for Tor, Flutter for the apps, Rust for the core.</div></div></div>
 </div>
-
-<section class="sec">
-''' + sec("heart", "Support the work") + '''
-<div class="tile lit">
-<span class="eyebrow">TRX (TRON)</span>
-<div class="wallet"><code>TRxVSHcoADZnBfztFmFb2TQopusAwWYEVR</code><button type="button" class="copy" data-copy="TRxVSHcoADZnBfztFmFb2TQopusAwWYEVR" aria-label="Copy TRX address">{{i:copy}}<span>Copy</span></button></div>
-</div>
-</section>''')
+''')
 
 # ---------------------------------------------------------------- download
 PAGES["download.html"] = ("download", "Download",

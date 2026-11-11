@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   dispatch-workflows:
-    name: Start CI, app builds, and Pages after each push
+    name: Start CI and Pages after each push
     runs-on: ubuntu-latest
     steps:
       - name: Dispatch the push workflows
@@ -24,5 +24,4 @@ jobs:
         run: |
           set -euo pipefail
           gh workflow run ci.yml --repo "$REPOSITORY" --ref "$REF"
-          gh workflow run apps.yml --repo "$REPOSITORY" --ref "$REF"
           gh workflow run pages.yml --repo "$REPOSITORY" --ref "$REF"
