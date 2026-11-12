@@ -200,10 +200,16 @@ jobs:
         working-directory: fox/core
         env:
           ANDROID_NDK_HOME: ${{ steps.fox-ndk.outputs.ndk-path }}
+          ANDROID_NDK_ROOT: ${{ steps.fox-ndk.outputs.ndk-path }}
         run: |
+          set -euo pipefail
           mkdir -p ../../apps/android-src/android/app/libs
-          go run golang.org/x/mobile/cmd/gomobile init
-          go run golang.org/x/mobile/cmd/gomobile bind -target=android/arm,android/arm64 -androidapi 24 -o ../../apps/android-src/android/app/libs/foxcore.aar ./mobile
+          mobile_version="$(go list -m -f '{{.Version}}' golang.org/x/mobile)"
+          go install "golang.org/x/mobile/cmd/gomobile@${mobile_version}"
+          go install "golang.org/x/mobile/cmd/gobind@${mobile_version}"
+          export PATH="$(go env GOPATH)/bin:$PATH"
+          gomobile init
+          gomobile bind -target=android/arm,android/arm64 -androidapi 24 -o ../../apps/android-src/android/app/libs/foxcore.aar ./mobile
 
       - name: Check native libraries
         run: |
@@ -456,92 +462,3 @@ jobs:
           path: dist/OryvexVPN-Setup-*-x64.exe
           if-no-files-found: error
 
-  # ------------------------------------------------------------------
-  # Windows 7 / 8 (and 10 / 11) in 32- and 64-bit: Flutter dropped
-  # Windows 7/8 after 3.19 and never shipped 32-bit Windows, so these
-  # get OryvexVPN Lite, a native Win32 GUI, and a core built for the
-  # *-win7-windows-msvc targets (nightly, -Z build-std). No Tor or
-  # Psiphon here: their Go helpers need Go 1.21+, which needs Windows 10.
-  # ------------------------------------------------------------------
-  windows-legacy:
-    name: Windows legacy (${{ matrix.arch }})
-    if: false
-    runs-on: windows-latest
-    # BoringSSL's CMake try-compile tree exceeds Windows' legacy path limit
-    # under the default nested Cargo target directory. Keep native build paths short.
-    env:
-      CARGO_TARGET_DIR: 'D:\t'
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - arch: x86
-            target: i686-win7-windows-msvc
-            zigarch: x86
-          - arch: x64
-            target: x86_64-win7-windows-msvc
-            zigarch: x86_64
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-
-      - uses: dtolnay/rust-toolchain@nightly
-        with:
-          components: rust-src
-
-      - uses: lukka/get-cmake@latest
-
-      - uses: ilammy/setup-nasm@v1
-
-      - uses: mlugg/setup-zig@v1
-        with:
-          version: 0.13.0
-
-      - name: Build bypass engine
-        shell: bash
-        run: bash oryvexcore/bypass/build.sh windows ${{ matrix.zigarch }} "$PWD/bypass-out"
-
-      - name: Build core
-        working-directory: oryvexcore
-        run: cargo build --release --target ${{ matrix.target }} -Z build-std=std,panic_unwind
-
-      - name: Build OryvexVPN Lite
-        working-directory: apps/desktop-lite-src
-        run: cargo build --release --target ${{ matrix.target }} -Z build-std=std,panic_abort
-
-      - name: Package
-        shell: bash
-        run: |
-          out=stage/OryvexVPN-windows-legacy-${{ matrix.arch }}
-          cargo_target_dir="$(cygpath -u "$CARGO_TARGET_DIR")"
-          mkdir -p "$out/LICENSES"
-          cp "$cargo_target_dir/${{ matrix.target }}/release/oryvexcore.exe" "$out/"
-          cp bypass-out/oryvex-bypass.exe "$out/"
-          cp "$cargo_target_dir/${{ matrix.target }}/release/OryvexVPNLite.exe" "$out/"
-          cp oryvexcore/run-oryvexcore.bat "$out/"
-          cp LICENSE "$out/LICENSES/oryvexcore-LICENSE.txt"
-          (cd oryvexcore && python scripts/third-party-notices.py --target ${{ matrix.target }} --output "../$out/LICENSES/THIRD-PARTY-NOTICES.txt")
-          cat > "$out/README.txt" <<'TXT'
-          OryvexVPN Lite - for Windows 7, 8, 8.1, 10 and 11
-
-          1. Unzip this folder anywhere (keep the files together).
-          2. Run OryvexVPNLite.exe, pick a protocol and press Connect.
-          3. Point your browser at SOCKS5 127.0.0.1:1819, or tick
-             "Set the Windows system proxy" before connecting.
-
-          oryvexcore.exe is the command-line core; run-oryvexcore.bat starts it
-          in a console window if you prefer flags. Settings and identities are
-          kept in %APPDATA%\OryvexCore.
-
-          Windows 7 needs Service Pack 1 and update KB2533623 (both come with
-          Windows Update). Tor and Psiphon are not in the legacy build: use the
-          Windows 10/11 app (OryvexVPN-windows-x64.zip) for the Tor route.
-          TXT
-          cd stage && 7z a -tzip "../OryvexVPN-windows-legacy-${{ matrix.arch }}.zip" "OryvexVPN-windows-legacy-${{ matrix.arch }}"
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: OryvexVPN-windows-legacy-${{ matrix.arch }}.zip
-          path: OryvexVPN-windows-legacy-${{ matrix.arch }}.zip
-          if-no-files-found: error

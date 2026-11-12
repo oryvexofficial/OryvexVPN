@@ -21,6 +21,8 @@ oryvexcore-masque-lastconn.toml
 *.pem
 # Bundled root store compiled into oryvexcore via include_str!.
 !oryvexcore/src/mitm_roots.pem
+# Fox's bundled public CA certificates are required by go:embed on Android.
+!fox/core/mobile/extra-roots.pem
 *.key
 
 # Zero Trust routing rule files may name internal hosts.
