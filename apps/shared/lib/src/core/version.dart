@@ -3,7 +3,7 @@
 /// `.github/workflows/auto-release.yml` rewrites [kAppVersion] when it tags a release, so the
 /// version the app shows (and compares in Updates) always matches the tag it was built from.
 const kAppName = 'OryvexVPN';
-const kAppVersion = '1.1.14';
+const kAppVersion = '1.1.15';
 const kCreator = 'Muvixo';
 
 /// GitHub repo that publishes releases, as "owner/name". `tools/set-repo.sh` rewrites it.
