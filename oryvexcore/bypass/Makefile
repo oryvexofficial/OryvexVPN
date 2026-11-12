@@ -1,0 +1,109 @@
+# Oryvex Core — native build
+# Cross-OS builds: see scripts/build-core.js (uses zig cc).
+
+CC      ?= cc
+CFLAGS  ?= -std=c11 -O2 -Wall -Wextra -pthread
+SRC      = $(wildcard src/*.c)
+BIN      = oryvex-bypass
+
+UNAME_S := $(shell uname -s)
+ifeq ($(OS),Windows_NT)
+  LDLIBS = -lws2_32 -liphlpapi
+  BIN    = oryvex-bypass.exe
+endif
+
+.PHONY: all test clean
+
+all: $(BIN)
+
+$(BIN): $(SRC)
+	$(CC) $(CFLAGS) -o $@ $(SRC) $(LDLIBS)
+
+# The sources engine.c needs besides itself, for tests that include it.
+ENGINE_DEPS = src/platform.c src/proto.c src/strategy.c src/desync.c src/fake.c src/doh.c src/socksudp.c src/adblock.c src/conns.c
+
+# The engine run inside another program's process (the Android app): main.c
+# without its main(), and what it needs.
+EMBED_SRC = $(ENGINE_DEPS) src/engine.c src/probe.c src/main.c src/watchdog.c
+
+test: test/test_proto.c test/test_udpdpi.c test/test_desync.c test/test_bogon.c test/test_engine.c test/test_tcpdpi.c test/test_rawscope.c test/test_socksudp.c test/test_embedded.c test/test_adblock.c test/test_dnsgate.c test/test_nfq.c $(SRC)
+	$(CC) -std=c11 -O2 -Wall -o /tmp/oryvex_test_proto src/proto.c src/strategy.c test/test_proto.c
+	/tmp/oryvex_test_proto
+	$(CC) -std=c11 -O2 -Wall -Wextra -o /tmp/oryvex_test_udpdpi src/udpdpi.c test/test_udpdpi.c
+	/tmp/oryvex_test_udpdpi
+	$(CC) -std=c11 -O2 -Wall -pthread -o /tmp/oryvex_test_desync \
+		src/platform.c src/proto.c src/strategy.c src/desync.c src/fake.c src/doh.c test/test_desync.c $(LDLIBS)
+	/tmp/oryvex_test_desync
+	$(CC) -std=c11 -O2 -Wall -pthread -o /tmp/oryvex_test_bogon_plain src/platform.c test/test_bogon.c $(LDLIBS)
+	/tmp/oryvex_test_bogon_plain
+	$(CC) -std=c11 -O2 -Wall -Wextra -pthread -o /tmp/oryvex_test_engine \
+		$(ENGINE_DEPS) test/test_engine.c $(LDLIBS)
+	/tmp/oryvex_test_engine
+	$(CC) -std=c11 -O2 -Wall -Wextra -o /tmp/oryvex_test_tcpdpi src/tcpdpi.c test/test_tcpdpi.c
+	/tmp/oryvex_test_tcpdpi
+	$(CC) -std=c11 -O2 -Wall -Wextra -o /tmp/oryvex_test_rawscope src/rawscope.c test/test_rawscope.c
+	/tmp/oryvex_test_rawscope
+	$(CC) -std=c11 -O2 -Wall -Wextra -o /tmp/oryvex_test_socksudp src/socksudp.c test/test_socksudp.c $(LDLIBS)
+	/tmp/oryvex_test_socksudp
+	$(CC) -std=c11 -O2 -Wall -Wextra -pthread -o /tmp/oryvex_test_adblock src/adblock.c src/platform.c test/test_adblock.c $(LDLIBS)
+	/tmp/oryvex_test_adblock
+	$(CC) -std=c11 -O2 -Wall -Wextra -pthread -o /tmp/oryvex_test_dnsgate src/dnsgate.c src/doh.c src/platform.c src/rawscope.c test/test_dnsgate.c $(LDLIBS)
+	/tmp/oryvex_test_dnsgate
+	$(CC) -std=c11 -O2 -Wall -Wextra -o /tmp/oryvex_test_nfq src/nfq.c test/test_nfq.c
+	/tmp/oryvex_test_nfq
+	$(CC) -std=c11 -O2 -Wall -Wextra -pthread -DORYVEX_NO_MAIN -o /tmp/oryvex_test_embedded \
+		$(EMBED_SRC) test/test_embedded.c $(LDLIBS)
+	/tmp/oryvex_test_embedded
+
+# Sanitizer build of the full test set (memory + UB checks).
+test-asan: test/test_proto.c test/test_udpdpi.c test/test_desync.c test/test_bogon.c test/test_engine.c test/test_tcpdpi.c test/test_rawscope.c test/test_socksudp.c test/test_embedded.c test/test_adblock.c test/test_dnsgate.c test/test_nfq.c $(SRC)
+	$(CC) -std=c11 -O1 -g -fsanitize=address,undefined -pthread \
+		-o /tmp/oryvex_test_asan \
+		src/platform.c src/proto.c src/strategy.c src/desync.c src/fake.c src/doh.c \
+		test/test_desync.c $(LDLIBS)
+	ASAN_OPTIONS=halt_on_error=0 /tmp/oryvex_test_asan
+	$(CC) -std=c11 -O1 -g -fsanitize=address,undefined -Wall -Wextra \
+		-o /tmp/oryvex_test_proto_asan src/proto.c src/strategy.c test/test_proto.c
+	ASAN_OPTIONS=halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1 /tmp/oryvex_test_proto_asan
+	$(CC) -std=c11 -O1 -g -fsanitize=address,undefined -Wall -Wextra \
+		-o /tmp/oryvex_test_udpdpi_asan src/udpdpi.c test/test_udpdpi.c
+	ASAN_OPTIONS=halt_on_error=0 /tmp/oryvex_test_udpdpi_asan
+	$(CC) -std=c11 -O1 -g -fsanitize=address,undefined \
+		-o /tmp/oryvex_test_tcpdpi_asan src/tcpdpi.c test/test_tcpdpi.c
+	ASAN_OPTIONS=halt_on_error=0 /tmp/oryvex_test_tcpdpi_asan
+	$(CC) -std=c11 -O1 -g -fsanitize=address,undefined -Wall -Wextra \
+		-o /tmp/oryvex_test_rawscope_asan src/rawscope.c test/test_rawscope.c
+	ASAN_OPTIONS=halt_on_error=0 /tmp/oryvex_test_rawscope_asan
+	$(CC) -std=c11 -O1 -g -fsanitize=address,undefined -pthread \
+		-o /tmp/oryvex_test_bogon src/platform.c test/test_bogon.c $(LDLIBS)
+	ASAN_OPTIONS=halt_on_error=0 /tmp/oryvex_test_bogon
+	$(CC) -std=c11 -O1 -g -fsanitize=address,undefined -pthread \
+		-o /tmp/oryvex_test_engine_asan $(ENGINE_DEPS) test/test_engine.c $(LDLIBS)
+	ASAN_OPTIONS=halt_on_error=0 /tmp/oryvex_test_engine_asan
+	$(CC) -std=c11 -O1 -g -fsanitize=address,undefined -pthread \
+		-o /tmp/oryvex_test_dnsgate_asan src/dnsgate.c src/doh.c src/platform.c src/rawscope.c test/test_dnsgate.c $(LDLIBS)
+	ASAN_OPTIONS=halt_on_error=0 /tmp/oryvex_test_dnsgate_asan
+	$(CC) -std=c11 -g -O1 -fsanitize=address,undefined -fno-omit-frame-pointer \
+		-o /tmp/oryvex_test_nfq_asan src/nfq.c test/test_nfq.c
+	ASAN_OPTIONS=halt_on_error=0 /tmp/oryvex_test_nfq_asan
+	$(CC) -std=c11 -O1 -g -fsanitize=address,undefined -Wall -Wextra \
+		-o /tmp/oryvex_test_socksudp_asan src/socksudp.c test/test_socksudp.c $(LDLIBS)
+	ASAN_OPTIONS=halt_on_error=1 /tmp/oryvex_test_socksudp_asan
+	$(CC) -std=c11 -O1 -g -fsanitize=address,undefined -Wall -Wextra -pthread \
+		-o /tmp/oryvex_test_adblock_asan src/adblock.c src/platform.c test/test_adblock.c $(LDLIBS)
+	ASAN_OPTIONS=halt_on_error=1 /tmp/oryvex_test_adblock_asan
+	$(CC) -std=c11 -O1 -g -fsanitize=address,undefined -pthread -DORYVEX_NO_MAIN \
+		-o /tmp/oryvex_test_embedded_asan $(EMBED_SRC) test/test_embedded.c $(LDLIBS)
+	ASAN_OPTIONS=halt_on_error=1 /tmp/oryvex_test_embedded_asan
+
+# Fuzz the untrusted-input parser (random + grammar-aware) under sanitizers.
+fuzz: test/fuzz_proto.c test/fuzz_mut.c src/proto.c
+	$(CC) -std=c11 -O1 -g -DSTANDALONE -fsanitize=address,undefined \
+		-o /tmp/oryvex_fuzz_rand src/proto.c test/fuzz_proto.c
+	ASAN_OPTIONS=halt_on_error=1 /tmp/oryvex_fuzz_rand
+	$(CC) -std=c11 -O1 -g -fsanitize=address,undefined \
+		-o /tmp/oryvex_fuzz_mut src/proto.c test/fuzz_mut.c
+	ASAN_OPTIONS=halt_on_error=1 /tmp/oryvex_fuzz_mut
+
+clean:
+	rm -f $(BIN) oryvex-bypass oryvex-bypass.exe /tmp/oryvex_test

@@ -1,0 +1,525 @@
+/* White-box test of the resolver's poisoning defenses by including doh.c. */
+#include "../src/platform.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+/* The system resolver, replaced: doh.c's getaddrinfo() calls land here, so a
+ * test can say what "the local network's DNS" answers. */
+static const char *g_sys_name[16]; static uint32_t g_sys_ip[16]; static int g_sys_n = 0, g_sys_asked = 0;
+static int test_getaddrinfo(const char *node, const char *svc, const struct addrinfo *hints, struct addrinfo **res) {
+  (void)svc;
+  g_sys_asked++;
+  *res = NULL;
+  if (hints && hints->ai_family == AF_INET6) return EAI_NONAME;
+  for (int i = 0; i < g_sys_n; i++) {
+    if (strcmp(node, g_sys_name[i]) != 0) continue;
+    struct addrinfo *ai = (struct addrinfo *)calloc(1, sizeof(*ai) + sizeof(struct sockaddr_in));
+    struct sockaddr_in *sa = (struct sockaddr_in *)(ai + 1);
+    sa->sin_family = AF_INET; sa->sin_addr.s_addr = htonl(g_sys_ip[i]);
+    ai->ai_family = AF_INET; ai->ai_socktype = SOCK_STREAM;
+    ai->ai_addr = (struct sockaddr *)sa; ai->ai_addrlen = sizeof(*sa);
+    *res = ai;
+    return 0;
+  }
+  return EAI_NONAME;
+}
+static void test_freeaddrinfo(struct addrinfo *ai) { free(ai); }
+static void sys_answers(const char *name, uint32_t ip) { g_sys_name[g_sys_n] = name; g_sys_ip[g_sys_n++] = ip; }
+#define getaddrinfo test_getaddrinfo
+#define freeaddrinfo test_freeaddrinfo
+
+#define main doh_main_unused
+#include "../src/doh.c"
+#undef main
+#undef getaddrinfo
+#undef freeaddrinfo
+
+static int fails=0;
+#define CHECK(c) do{if(!(c)){printf("FAIL %s:%d %s\n",__FILE__,__LINE__,#c);fails++;}}while(0)
+
+/* Build a DNS response with one A record pointing at the given IPv4. */
+static int build_resp(uint8_t *b, uint16_t id, const char *name, uint32_t ip) {
+  int p=0;
+  b[p++]=id>>8; b[p++]=id&0xff;
+  b[p++]=0x81; b[p++]=0x80;   /* response, no error */
+  b[p++]=0; b[p++]=1;         /* qd */
+  b[p++]=0; b[p++]=1;         /* an */
+  b[p++]=0; b[p++]=0; b[p++]=0; b[p++]=0;
+  /* question */
+  const char *s=name;
+  while(*s){ const char*d=strchr(s,'.'); int l=d?(int)(d-s):(int)strlen(s);
+    b[p++]=(uint8_t)l; memcpy(b+p,s,l); p+=l; if(!d)break; s=d+1; }
+  b[p++]=0; b[p++]=0;b[p++]=1; b[p++]=0;b[p++]=1;
+  /* answer: name ptr to 0x0c, type A, class IN, ttl, rdlen 4, ip */
+  b[p++]=0xc0; b[p++]=0x0c;
+  b[p++]=0;b[p++]=1; b[p++]=0;b[p++]=1;
+  b[p++]=0;b[p++]=0;b[p++]=0;b[p++]=60;
+  b[p++]=0;b[p++]=4;
+  b[p++]=(ip>>24)&0xff; b[p++]=(ip>>16)&0xff; b[p++]=(ip>>8)&0xff; b[p++]=ip&0xff;
+  return p;
+}
+
+/* A response carrying several records: ips[i] (A) with ttls[i]. When cname is
+ * set, a CNAME record comes first and the A records hang off a name that is
+ * part label, part compression pointer — the shape real resolvers send. */
+static int build_multi(uint8_t *b, const char *name, const uint32_t *ips, const uint32_t *ttls,
+                       int n, int cname) {
+  int p=0;
+  b[p++]=0x12; b[p++]=0x34; b[p++]=0x81; b[p++]=0x80;
+  b[p++]=0; b[p++]=1; b[p++]=0; b[p++]=(uint8_t)(n+(cname?1:0));
+  b[p++]=0; b[p++]=0; b[p++]=0; b[p++]=0;
+  const char *s=name;
+  while(*s){ const char*d=strchr(s,'.'); int l=d?(int)(d-s):(int)strlen(s);
+    b[p++]=(uint8_t)l; memcpy(b+p,s,l); p+=l; if(!d)break; s=d+1; }
+  b[p++]=0; b[p++]=0;b[p++]=1; b[p++]=0;b[p++]=1;
+  int target=0x0c;
+  if(cname){
+    b[p++]=0xc0; b[p++]=0x0c; b[p++]=0;b[p++]=5; b[p++]=0;b[p++]=1;
+    b[p++]=0;b[p++]=0;b[p++]=0;b[p++]=60; b[p++]=0;b[p++]=6;
+    target=p;                                   /* "\x03cdn" + pointer to the name */
+    b[p++]=3; b[p++]='c'; b[p++]='d'; b[p++]='n'; b[p++]=0xc0; b[p++]=0x0c;
+  }
+  for(int i=0;i<n;i++){
+    b[p++]=(uint8_t)(0xc0|(target>>8)); b[p++]=(uint8_t)(target&0xff);
+    b[p++]=0;b[p++]=1; b[p++]=0;b[p++]=1;
+    b[p++]=(uint8_t)(ttls[i]>>24); b[p++]=(uint8_t)(ttls[i]>>16); b[p++]=(uint8_t)(ttls[i]>>8); b[p++]=(uint8_t)ttls[i];
+    b[p++]=0;b[p++]=4;
+    b[p++]=(uint8_t)(ips[i]>>24); b[p++]=(uint8_t)(ips[i]>>16); b[p++]=(uint8_t)(ips[i]>>8); b[p++]=(uint8_t)ips[i];
+  }
+  return p;
+}
+
+/* The forwarder's "no route" for a query whose question ends at qend
+ * (electron/doh-forwarder.js noRouteReply). */
+static int noroute_reply(uint8_t *r, const uint8_t *q, int qend) {
+  static const uint8_t opt[15] = { 0, 0, 41, 0x04, 0xd0, 0, 0, 0, 0, 0, 4,
+                                   DOH_NOROUTE_OPT >> 8, DOH_NOROUTE_OPT & 0xff, 0, 0 };
+  memcpy(r, q, (size_t)qend);
+  r[2] = 0x81; r[3] = 0x85;                       /* a response: refused */
+  r[6] = r[7] = r[8] = r[9] = r[10] = 0; r[11] = 1;
+  memcpy(r + qend, opt, sizeof(opt));
+  return qend + (int)sizeof(opt);
+}
+
+/* A forwarder on 127.0.0.1 standing in for encrypted DNS: "public.example"
+ * has 93.184.216.34, "published.example" only 10.1.2.3, "bogus.example" is
+ * a server failure (its DNSSEC signatures are wrong), "noroute*.example"
+ * gets its "no route", "late.example" that and then, 300 ms later, an
+ * answer, "silent.example" nothing at all, and every other name does not
+ * exist. Counts the queries it gets. */
+static struct { sock_t s; uint16_t port; _Atomic int queries; _Atomic int stop; _Atomic int moving; } g_fwd;
+static void *fwd_thread(void *arg) {
+  (void)arg;
+  while (!atomic_load(&g_fwd.stop)) {
+    if (sock_wait_readable(g_fwd.s, 100) != 1) continue;
+    uint8_t q[512], r[600]; struct sockaddr_in from; socklen_t fl = sizeof(from);
+    int n = (int)recvfrom(g_fwd.s, (char *)q, sizeof(q), 0, (struct sockaddr *)&from, &fl);
+    if (n < 17) continue;
+    atomic_fetch_add(&g_fwd.queries, 1);
+    char name[256]; int p = 12, k = 0;
+    while (p < n && q[p] && k < 250) { int l = q[p]; if (k) name[k++] = '.'; memcpy(name + k, q + p + 1, (size_t)l); k += l; p += 1 + l; }
+    name[k] = 0;
+    int qend = p + 5;
+    uint32_t ip = 0;
+    if (!strcmp(name, "silent.example")) continue;
+    if (!strncmp(name, "noroute", 7) || !strcmp(name, "late.example")) {
+      int m = noroute_reply(r, q, qend);
+      sendto(g_fwd.s, (const char *)r, m, 0, (struct sockaddr *)&from, fl);
+      if (strcmp(name, "late.example") != 0) continue;
+      sleep_ms(300);
+      ip = 0x5db8d877;
+    }
+    if (!strcmp(name, "public.example")) ip = 0x5db8d822;
+    else if (!strcmp(name, "published.example")) ip = 0x0a010203;
+    else if (!strncmp(name, "n", 1) && strstr(name, ".many.example")) ip = 0x5db80000u | (uint32_t)(atoi(name + 1) & 0xffff);
+    else if (!strcmp(name, "moving.example")) ip = 0x5db8d900u | (uint32_t)(atomic_fetch_add(&g_fwd.moving, 1) + 1);
+    memcpy(r, q, (size_t)qend);
+    r[2] = 0x81; r[3] = ip ? 0x80 : !strcmp(name, "bogus.example") ? 0x82 : 0x83;
+    r[6] = 0; r[7] = ip ? 1 : 0; r[8] = r[9] = r[10] = r[11] = 0;
+    int m = qend;
+    if (ip) {
+      uint8_t rr[16] = { 0xc0, 0x0c, 0, 1, 0, 1, 0, 0, 0, 60, 0, 4,
+                         (uint8_t)(ip >> 24), (uint8_t)(ip >> 16), (uint8_t)(ip >> 8), (uint8_t)ip };
+      memcpy(r + m, rr, 16); m += 16;
+    }
+    sendto(g_fwd.s, (const char *)r, m, 0, (struct sockaddr *)&from, fl);
+  }
+  return NULL;
+}
+static void fwd_start(void) {
+  g_fwd.s = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+  struct sockaddr_in a; memset(&a, 0, sizeof(a)); socklen_t al = sizeof(a);
+  a.sin_family = AF_INET; a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+  bind(g_fwd.s, (struct sockaddr *)&a, sizeof(a));
+  getsockname(g_fwd.s, (struct sockaddr *)&a, &al);
+  g_fwd.port = ntohs(a.sin_port);
+  thread_spawn(fwd_thread, NULL, 0);
+}
+static void fwd_stop(void) { atomic_store(&g_fwd.stop, 1); sleep_ms(200); sock_close(g_fwd.s); }
+
+/* dns_parse with the old one-address shape, for the single-record checks. */
+static int parse1(const uint8_t *b, int n) {
+  uint8_t a[DOH_MAX_ADDRS][16]; int na=0; uint32_t ttl=0;
+  return dns_parse(b,n,0,a,DOH_MAX_ADDRS,&na,&ttl);
+}
+
+/* An AAAA reply for name with the given addresses (16 bytes each). */
+static int build_aaaa(uint8_t *b, const char *name, const uint8_t (*ips)[16], int n) {
+  int p = 0;
+  b[p++]=0x12; b[p++]=0x34; b[p++]=0x81; b[p++]=0x80; b[p++]=0; b[p++]=1; b[p++]=0; b[p++]=(uint8_t)n; b[p++]=0; b[p++]=0; b[p++]=0; b[p++]=0;
+  const char *s = name;
+  while (*s) { const char *d = strchr(s, '.'); int l = d ? (int)(d - s) : (int)strlen(s); b[p++]=(uint8_t)l; memcpy(b+p,s,(size_t)l); p+=l; s += l + (d ? 1 : 0); if (!d) break; }
+  b[p++]=0; b[p++]=0; b[p++]=28; b[p++]=0; b[p++]=1;
+  for (int i = 0; i < n; i++) {
+    b[p++]=0xc0; b[p++]=0x0c; b[p++]=0; b[p++]=28; b[p++]=0; b[p++]=1; b[p++]=0; b[p++]=0; b[p++]=0x0e; b[p++]=0x10; b[p++]=0; b[p++]=16;
+    memcpy(b+p, ips[i], 16); p += 16;
+  }
+  return p;
+}
+
+int main(void){
+  uint8_t b[512];
+  doh_init(NULL,NULL);
+
+  /* 1. a legitimate public IP is accepted */
+  int n=build_resp(b,0x1234,"example.com",0x5db8d822 /*93.184.216.34*/);
+  CHECK(parse1(b,n)==0);
+  printf("  legit public IP accepted: OK\n");
+
+  /* 2. poisoned answer -> 127.0.0.1 (loopback bogon) is REJECTED */
+  n=build_resp(b,0x1234,"blocked.com",0x7f000001 /*127.0.0.1*/);
+  CHECK(parse1(b,n)!=0);
+  printf("  poisoned 127.0.0.1 rejected: %s\n", parse1(b,n)!=0?"OK":"FAIL");
+
+  /* 3. poisoned -> 0.0.0.0 rejected */
+  n=build_resp(b,0x1234,"blocked.com",0x00000000);
+  CHECK(parse1(b,n)!=0);
+
+  /* 4. poisoned -> 10.x private (common sinkhole) rejected */
+  n=build_resp(b,0x1234,"blocked.com",0x0a0a0a0a /*10.10.10.10*/);
+  CHECK(parse1(b,n)!=0);
+  printf("  poisoned 10.10.10.10 rejected: OK\n");
+
+  /* 5. poisoned -> 192.168.x rejected */
+  n=build_resp(b,0x1234,"blocked.com",0xc0a80001);
+  CHECK(parse1(b,n)!=0);
+
+  /* 6. bogon filter unit checks */
+  CHECK(is_bogon_v4(0x7f000001)==1); /* 127.0.0.1 */
+  CHECK(is_bogon_v4(0x0a000001)==1); /* 10.0.0.1 */
+  CHECK(is_bogon_v4(0xc0a80001)==1); /* 192.168.0.1 */
+  CHECK(is_bogon_v4(0xac100001)==1); /* 172.16.0.1 */
+  CHECK(is_bogon_v4(0xa9fe0001)==1); /* 169.254.0.1 */
+  CHECK(is_bogon_v4(0xe0000001)==1); /* 224.0.0.1 multicast */
+  CHECK(is_bogon_v4(0x08080808)==0); /* 8.8.8.8 ok */
+  CHECK(is_bogon_v4(0x5db8d822)==0); /* 93.184.216.34 ok */
+  printf("  bogon filter unit checks: OK\n");
+
+  /* 7. truncated response must not crash */
+  n=build_resp(b,0x1234,"x.com",0x08080808);
+  for(int cut=0;cut<n;cut++){ parse1(b,cut); }
+  printf("  truncated parse (no crash): OK\n");
+
+  /* 8. every usable address comes back, in order, bogons left out, with the
+   *    smallest TTL — also through a CNAME with a part-compressed name */
+  for(int cname=0;cname<2;cname++){
+    uint32_t ips[4]={0x5db8d822,0x7f000001,0x08080808,0x01010101};
+    uint32_t ttls[4]={600,5,90,3600};
+    n=build_multi(b,"multi.example.com",ips,ttls,4,cname);
+    uint8_t a[DOH_MAX_ADDRS][16]; int na=0; uint32_t ttl=0;
+    CHECK(dns_parse(b,n,0,a,DOH_MAX_ADDRS,&na,&ttl)==0);
+    CHECK(na==3);
+    CHECK(a[0][0]==93 && a[1][0]==8 && a[2][0]==1);
+    CHECK(ttl==90);                     /* the bogon's TTL does not count */
+    na=0; CHECK(dns_parse(b,n,0,a,2,&na,&ttl)==0 && na==2);   /* capped */
+    for(int cut=0;cut<n;cut++){ dns_parse(b,cut,0,a,DOH_MAX_ADDRS,&na,&ttl); }
+  }
+  printf("  all addresses of a name, bogons dropped, min TTL, CNAME: OK\n");
+
+  /* 9. only bogons -> no usable record; DNS_PRIVATE when one of them was a
+   *    private address (the name is published with one) */
+  { uint32_t ips[2]={0x0a000001,0x7f000001}, ttls[2]={60,60};
+    n=build_multi(b,"x.com",ips,ttls,2,0);
+    uint8_t a[DOH_MAX_ADDRS][16]; int na=0; uint32_t ttl=0;
+    CHECK(dns_parse(b,n,0,a,DOH_MAX_ADDRS,&na,&ttl)==DNS_PRIVATE && na==0);
+    uint32_t lo[2]={0x7f000001,0x00000000};
+    n=build_multi(b,"x.com",lo,ttls,2,0);
+    CHECK(dns_parse(b,n,0,a,DOH_MAX_ADDRS,&na,&ttl)==DNS_NODATA && na==0);
+    uint32_t bp[1]={0xC3AFFE02u};
+    n=build_multi(b,"x.com",bp,ttls,1,0);
+    CHECK(dns_parse(b,n,0,a,DOH_MAX_ADDRS,&na,&ttl)==DNS_NODATA && na==0); }
+
+  /* 9b. NXDOMAIN is an answer ("no such name"); SERVFAIL is told apart (the
+   * forwarder's is believed, a plaintext resolver's means ask the next); any
+   * other error code is a broken reply */
+  { uint32_t ips[1]={0x08080808}, ttls[1]={60};
+    n=build_multi(b,"x.com",ips,ttls,1,0);
+    uint8_t a[DOH_MAX_ADDRS][16]; int na=0; uint32_t ttl=0;
+    b[3]=0x83; CHECK(dns_parse(b,n,0,a,DOH_MAX_ADDRS,&na,&ttl)==DNS_NXDOMAIN);
+    b[3]=0x82; CHECK(dns_parse(b,n,0,a,DOH_MAX_ADDRS,&na,&ttl)==DNS_SERVFAIL);
+    b[3]=0x85; CHECK(dns_parse(b,n,0,a,DOH_MAX_ADDRS,&na,&ttl)==-1); }
+
+  /* 10. TTL is honoured but held to 20 s .. 5 min */
+  CHECK(ttl_clamp(0)==20 && ttl_clamp(19)==20 && ttl_clamp(60)==60 && ttl_clamp(300)==300 && ttl_clamp(86400)==300);
+  { uint8_t a[3][16]; memset(a,0,sizeof(a));
+    a[0][0]=93; a[0][3]=1; a[1][0]=8; a[1][3]=8; a[2][0]=1; a[2][3]=1;
+    uint64_t t0=now_ms();
+    mutex_lock(&g_cache_mx); cache_put("ttl.example",AF_INET,a,3,1); cache_entry *e=cache_find("ttl.example",AF_INET,0,NULL);
+    CHECK(e && e->expires>=t0+20000 && e->expires<=now_ms()+20000);
+    cache_put("ttl.example",AF_INET,a,3,100000); e=cache_find("ttl.example",AF_INET,0,NULL);
+    CHECK(e && e->expires<=now_ms()+300000 && e->expires>=t0+300000);
+    mutex_unlock(&g_cache_mx);
+
+    /* 11. cached answers come back in full, with the asked port */
+    struct sockaddr_storage out[DOH_MAX_ADDRS]; socklen_t ol[DOH_MAX_ADDRS];
+    CHECK(doh_resolve_all("ttl.example",8443,0,out,ol,DOH_MAX_ADDRS)==3);
+    CHECK(ntohs(((struct sockaddr_in*)&out[1])->sin_port)==8443);
+    CHECK(((uint8_t*)&((struct sockaddr_in*)&out[1])->sin_addr)[0]==8);
+
+    /* 12. an address that failed is dropped; once none are left the name
+     *     is looked up again */
+    doh_forget("ttl.example",&out[0]);
+    CHECK(doh_resolve_all("ttl.example",443,0,out,ol,DOH_MAX_ADDRS)==2);
+    CHECK(((uint8_t*)&((struct sockaddr_in*)&out[0])->sin_addr)[0]==8);
+    doh_forget("ttl.example",&out[0]); doh_forget("ttl.example",&out[1]);
+    mutex_lock(&g_cache_mx); CHECK(cache_find("ttl.example",AF_INET,1,NULL)==NULL); mutex_unlock(&g_cache_mx);
+  }
+  printf("  TTL clamp, multi-address cache, forget-on-failure: OK\n");
+
+  /* 13. block pages a SOCKS4 request is recovered from: the built-in one and
+   *     those the app adds — never 0.0.0.0 or loopback, which a hosts file or
+   *     the user's own filtering DNS answers with on purpose, and never a LAN
+   *     address someone asked for */
+  CHECK(doh_ipv4_is_blockpage(0xC3AFFE02u)==1);
+  CHECK(doh_ipv4_is_blockpage(0xcb00710a)==0);           /* 203.0.113.10 */
+  doh_add_block_ip("203.0.113.10");
+  CHECK(doh_ipv4_is_blockpage(0xcb00710a)==1);
+  CHECK(doh_ipv4_is_blockpage(0)==0);
+  CHECK(doh_ipv4_is_blockpage(0x7f000001)==0 && doh_ipv4_is_blockpage(0x7f0000fe)==0);
+  CHECK(doh_ipv4_is_blockpage(0xc0a80101)==0 && doh_ipv4_is_blockpage(0x08080808)==0);
+  printf("  block-page addresses: OK\n");
+
+  /* 13b. IPv6: Iran's block page (2001:4188:2:600:10:10:34:3x), an IPv4
+   *      block page written as IPv6, and bogons are no answer; a real
+   *      address is kept, and a LAN's own address marks a private answer */
+  {
+    const uint8_t ir[16] = {0x20,0x01,0x41,0x88,0x00,0x02,0x06,0x00,0x00,0x10,0x00,0x10,0x00,0x34,0x00,0x36};
+    const uint8_t mapped[16] = {0,0,0,0,0,0,0,0,0,0,0xff,0xff,0xc3,0xaf,0xfe,0x02};   /* ::ffff:195.175.254.2 */
+    const uint8_t real[16] = {0x2a,0x03,0x28,0x80,0xf1,0x2f,0x00,0x83,0xfa,0xce,0xb0,0x0c,0,0,0x25,0xde};
+    const uint8_t ula[16] = {0xfd,0x00,0,0,0,0,0,0,0,0,0,0,0,0,0,1};
+    CHECK(doh_ipv6_is_blockpage(ir) && doh_ipv6_is_blockpage(mapped) && !doh_ipv6_is_blockpage(real));
+    uint8_t ips[3][16]; memcpy(ips[0], ir, 16); memcpy(ips[1], real, 16); memcpy(ips[2], mapped, 16);
+    n = build_aaaa(b, "instagram.com", (const uint8_t (*)[16])ips, 3);
+    uint8_t a[DOH_MAX_ADDRS][16]; int na = 0; uint32_t ttl = 0;
+    CHECK(dns_parse(b, n, 1, a, DOH_MAX_ADDRS, &na, &ttl) == 0 && na == 1 && memcmp(a[0], real, 16) == 0);
+    n = build_aaaa(b, "instagram.com", (const uint8_t (*)[16])&ir, 1);
+    na = 0; CHECK(dns_parse(b, n, 1, a, DOH_MAX_ADDRS, &na, &ttl) == DNS_NODATA);
+    n = build_aaaa(b, "nas.example", (const uint8_t (*)[16])&ula, 1);
+    na = 0; CHECK(dns_parse(b, n, 1, a, DOH_MAX_ADDRS, &na, &ttl) == DNS_PRIVATE);
+    struct sockaddr_storage ss; memset(&ss, 0, sizeof(ss)); ss.ss_family = AF_INET6;
+    memcpy(&((struct sockaddr_in6 *)&ss)->sin6_addr, ir, 16);
+    CHECK(doh_addr_is_block(&ss) && sys_answer_refused(&ss, 0) && sys_answer_refused(&ss, 1));
+    memcpy(&((struct sockaddr_in6 *)&ss)->sin6_addr, ula, 16);
+    CHECK(sys_answer_refused(&ss, 0) && !sys_answer_refused(&ss, 1));
+    memcpy(&((struct sockaddr_in6 *)&ss)->sin6_addr, real, 16);
+    CHECK(!doh_addr_is_block(&ss) && !sys_answer_refused(&ss, 0));
+    doh_add_block_ip("2001:db8::bad");
+    const uint8_t added[16] = {0x20,0x01,0x0d,0xb8,0,0,0,0,0,0,0,0,0,0,0x0b,0xad};
+    CHECK(doh_ipv6_is_blockpage(added));
+  }
+  printf("  IPv6 block pages and bogons: OK\n");
+
+  /* 14. local names, and what the system resolver may answer */
+  CHECK(doh_local_name("router") && doh_local_name("nas.lan") && doh_local_name("NAS.LAN") &&
+        doh_local_name("printer.local") && doh_local_name("fritz.home.arpa") && doh_local_name("git.corp.internal"));
+  CHECK(!doh_local_name("example.com") && !doh_local_name("lan.example.com") && !doh_local_name("") &&
+        !doh_local_name("evil-local.com"));
+  /* A fully qualified name with its final dot is the same name. */
+  CHECK(doh_local_name("router.") && doh_local_name("nas.lan.") && !doh_local_name("example.com.") && !doh_local_name("."));
+  { struct sockaddr_storage ss; memset(&ss,0,sizeof(ss)); struct sockaddr_in *s4=(struct sockaddr_in*)&ss; s4->sin_family=AF_INET;
+    uint32_t ok_trusted[] = { 0x0a141e28, 0xc0a80101, 0xac100001, 0xa9fe0001, 0x64400001, 0x5db8d822 };
+    for (size_t i=0;i<sizeof(ok_trusted)/4;i++){ s4->sin_addr.s_addr=htonl(ok_trusted[i]);
+      CHECK(sys_answer_refused(&ss,1)==0); CHECK(sys_answer_refused(&ss,0)==(ok_trusted[i]!=0x5db8d822)); }
+    uint32_t never[] = { 0x00000000, 0x7f000001, 0xe0000001, 0xffffffff, 0xC3AFFE02u };
+    for (size_t i=0;i<sizeof(never)/4;i++){ s4->sin_addr.s_addr=htonl(never[i]); CHECK(sys_answer_refused(&ss,1)==1 && sys_answer_refused(&ss,0)==1); } }
+  printf("  local names, trusted system answers: OK\n");
+
+  /* 15. the whole lookup, against a forwarder standing in for encrypted DNS */
+  { fwd_start();
+    doh_set_local("127.0.0.1", g_fwd.port);
+    struct sockaddr_in fa; CHECK(doh_local_addr(&fa)==0 && ntohs(fa.sin_port)==g_fwd.port);
+    sys_answers("intranet.corp.example", 0x0a141e28);   /* encrypted DNS: no such name */
+    sys_answers("published.example", 0x0a010203);       /* encrypted DNS: 10.1.2.3 only */
+    sys_answers("public.example", 0x0a0a2222);          /* encrypted DNS: a public address */
+    sys_answers("blockpage.corp.example", 0xC3AFFE02u);
+    sys_answers("nas.lan", 0xc0a8010a);
+    sys_answers("loop.lan", 0x7f000001);
+    sys_answers("poisoned.example", 0x0a0a2222);
+    sys_answers("bogus.example", 0x5db8d822);
+    sys_answers("elsewhere.example", 0x5db8d822);
+    struct sockaddr_storage out[DOH_MAX_ADDRS]; socklen_t ol[DOH_MAX_ADDRS];
+    #define V4(i) ntohl(((struct sockaddr_in*)&out[i])->sin_addr.s_addr)
+
+    /* The public resolvers stay out of it: silent for the whole test. */
+    mutex_lock(&g_cache_mx); g_plain_dead_until = now_ms() + 600000; mutex_unlock(&g_cache_mx);
+    /* No such name publicly, and the local DNS has a private address for it:
+     * a public-looking name, so that answer is refused (only a local name's
+     * is taken). */
+    CHECK(doh_resolve_all("intranet.corp.example",80,0,out,ol,DOH_MAX_ADDRS)==-1);
+    /* Published with only a private address (a page pointing a public name
+     * at the LAN): refused, and the system resolver is not even asked. */
+    int asked0=g_sys_asked;
+    CHECK(doh_resolve_all("published.example",80,0,out,ol,DOH_MAX_ADDRS)==-1 && g_sys_asked==asked0);
+    /* A public name: encrypted DNS's answer, the system resolver not asked. */
+    int asked=g_sys_asked;
+    CHECK(doh_resolve_all("public.example",80,0,out,ol,DOH_MAX_ADDRS)==1 && V4(0)==0x5db8d822 && g_sys_asked==asked);
+    /* Encrypted DNS says the server failed (a name whose signatures do not
+     * check out): that is the answer, at once. Before, the engine waited out
+     * its 4 s for another reply and then asked the plaintext resolvers and
+     * the system's, which gave the forged address (issue #34). */
+    asked=g_sys_asked;
+    uint64_t t0=now_ms();
+    CHECK(doh_resolve_all("bogus.example",80,0,out,ol,DOH_MAX_ADDRS)==-1 && g_sys_asked==asked);
+    CHECK(now_ms()-t0 < 1500);
+    /* Only the user's server (strict): a name it says does not exist is not
+     * asked of the system resolver, which would know it; without strict it
+     * is, as for a hosts-file entry. */
+    doh_set_strict(1);
+    CHECK(doh_strict()==1);
+    CHECK(doh_resolve_all("elsewhere.example",80,0,out,ol,DOH_MAX_ADDRS)==-1 && g_sys_asked==asked);
+    doh_set_strict(0);
+    CHECK(doh_resolve_all("elsewhere.example",80,0,out,ol,DOH_MAX_ADDRS)==1 && V4(0)==0x5db8d822 && g_sys_asked==asked+1);
+    /* No such name, and the local DNS answers with a block page: refused. */
+    CHECK(doh_resolve_all("blockpage.corp.example",80,0,out,ol,DOH_MAX_ADDRS)==-1);
+    /* A local name: only the system resolver is asked, its private answer taken
+     * — but never loopback. */
+    int fq=atomic_load(&g_fwd.queries);
+    CHECK(doh_resolve_all("nas.lan",80,0,out,ol,DOH_MAX_ADDRS)==1 && V4(0)==0xc0a8010a);
+    CHECK(doh_resolve_all("loop.lan",80,0,out,ol,DOH_MAX_ADDRS)==-1);
+    CHECK(atomic_load(&g_fwd.queries)==fq);
+    /* Encrypted DNS out of reach (no forwarder, public resolvers silent): the
+     * system resolver's private answer is what a censor says, and refused. */
+    doh_set_local(NULL, 0);
+    /* Strict means nothing without a forwarder to be strict about. */
+    doh_set_strict(1); CHECK(doh_strict()==0); doh_set_strict(0);
+    CHECK(doh_resolve_all("poisoned.example",80,0,out,ol,DOH_MAX_ADDRS)==-1);
+    CHECK(doh_local_addr(&fa)==-1);
+    printf("  private answers only for local names: OK\n");
+
+    /* 16. Room for thousands of names: of 2000 looked up, nearly all are
+     *     kept (it held 256 answers, so names in use were pushed out and
+     *     looked up again), and each comes back with its own address. */
+    doh_set_local("127.0.0.1", g_fwd.port);
+    doh_clear_cache();
+    mutex_lock(&g_cache_mx); g_plain_dead_until = now_ms() + 600000; mutex_unlock(&g_cache_mx);
+    char nm[64]; int all_ok = 1, kept = 0;
+    for (int i = 0; i < 2000; i++) {
+      snprintf(nm, sizeof(nm), "n%d.many.example", i);
+      if (doh_resolve_all(nm,443,0,out,ol,DOH_MAX_ADDRS) != 1 || V4(0) != (0x5db80000u | (uint32_t)i)) all_ok = 0;
+    }
+    for (int i = 0; i < 2000; i++) {
+      snprintf(nm, sizeof(nm), "n%d.many.example", i);
+      mutex_lock(&g_cache_mx);
+      cache_entry *ke = cache_find(nm, AF_INET, 0, NULL);
+      if (ke && ke->naddr == 1 && ke->addr[0][3] == (uint8_t)i && ke->addr[0][2] == (uint8_t)(i >> 8)) kept++;
+      mutex_unlock(&g_cache_mx);
+    }
+    CHECK(all_ok && kept >= 1960);
+    int q0 = atomic_load(&g_fwd.queries);
+    for (int i = 1990; i >= 0; i -= 10) {
+      snprintf(nm, sizeof(nm), "n%d.many.example", i);
+      if (doh_resolve_all(nm,443,0,out,ol,DOH_MAX_ADDRS) != 1 || V4(0) != (0x5db80000u | (uint32_t)i)) all_ok = 0;
+    }
+    CHECK(all_ok && atomic_load(&g_fwd.queries) - q0 <= 4);
+    printf("  2000 names: %d kept: OK\n", kept);
+
+    /* 17. Past its TTL, an answer is still handed out at once, and one fresh
+     *     lookup runs in the background for any number of connections; the
+     *     next connection after it gets the fresh answer. */
+    CHECK(doh_resolve_all("moving.example",443,0,out,ol,DOH_MAX_ADDRS)==1 && V4(0)==0x5db8d901);
+    mutex_lock(&g_cache_mx);
+    cache_entry *mv = cache_find("moving.example",AF_INET,0,NULL);
+    CHECK(mv != NULL); if (mv) mv->expires = now_ms() - 1000;
+    mutex_unlock(&g_cache_mx);
+    q0 = atomic_load(&g_fwd.queries);
+    uint64_t t1 = now_ms(); int stale_ok = 1;
+    for (int i = 0; i < 20; i++)
+      if (doh_resolve_all("moving.example",443,0,out,ol,DOH_MAX_ADDRS) != 1 || V4(0) != 0x5db8d901) stale_ok = 0;
+    CHECK(stale_ok && now_ms() - t1 < 500);
+    for (int i = 0; i < 200 && atomic_load(&g_fwd.queries) == q0; i++) sleep_ms(10);
+    for (int i = 0; i < 200; i++) {
+      mutex_lock(&g_cache_mx); int busy = g_refreshing; mutex_unlock(&g_cache_mx);
+      if (!busy) break;
+      sleep_ms(10);
+    }
+    CHECK(atomic_load(&g_fwd.queries) - q0 == 1);
+    CHECK(doh_resolve_all("moving.example",443,0,out,ol,DOH_MAX_ADDRS)==1 && V4(0)==0x5db8d902);
+    /* Long past it (beyond STALE_S): looked up before it is handed out. */
+    mutex_lock(&g_cache_mx);
+    mv = cache_find("moving.example",AF_INET,0,NULL);
+    CHECK(mv != NULL); if (mv) mv->expires = now_ms() - (uint64_t)STALE_S * 1000 - 1000;
+    mutex_unlock(&g_cache_mx);
+    CHECK(doh_resolve_all("moving.example",443,0,out,ol,DOH_MAX_ADDRS)==1 && V4(0)==0x5db8d903);
+    printf("  stale answers at once, one fetch in the background: OK\n");
+
+    /* 18. The forwarder's "no route" (encrypted DNS blocked here): the
+     *     fallback is asked at once, not after FWD_WAIT_MS, and for a while
+     *     the next names wait only a moment for the forwarder; any answer
+     *     from it ends that. A server failure stays the answer throughout. */
+    { uint8_t q[512], r[600];
+      int ql = dns_build(q, "noroute.example", 0x4242, 1), qe = ql;
+      int rl = noroute_reply(r, q, qe);
+      uint8_t ad[DOH_MAX_ADDRS][16]; int an = 0; uint32_t at = 0;
+      CHECK(dns_parse(r, rl, 0, ad, DOH_MAX_ADDRS, &an, &at) == DNS_NOROUTE);
+      CHECK(doh_reply_noroute(r, rl) == 1 && doh_reply_usable(r, rl, 1) == 0);
+      /* An upstream's own refusal, without the option, and a server failure
+       * with it, are not "no route". */
+      uint8_t plain[600]; memcpy(plain, r, (size_t)rl); plain[11] = 0;
+      CHECK(dns_parse(plain, qe, 0, ad, DOH_MAX_ADDRS, &an, &at) == -1 && doh_reply_noroute(plain, qe) == 0);
+      uint8_t other[600]; memcpy(other, r, (size_t)rl); other[rl - 4] = 0xfd; other[rl - 3] = 0xea;
+      CHECK(doh_reply_noroute(other, rl) == 0);
+      uint8_t sf[600]; memcpy(sf, r, (size_t)rl); sf[3] = 0x82;
+      CHECK(dns_parse(sf, rl, 0, ad, DOH_MAX_ADDRS, &an, &at) == DNS_SERVFAIL && doh_reply_noroute(sf, rl) == 0);
+      /* Cut short anywhere: never read past its end. */
+      for (int cut = 12; cut < rl; cut++) CHECK(doh_reply_noroute(r, cut) == 0); }
+    sys_answers("noroute.example", 0x5db8d830);
+    sys_answers("noroute2.example", 0x5db8d831);
+    sys_answers("silent.example", 0x5db8d832);
+    doh_clear_cache();
+    mutex_lock(&g_cache_mx); g_plain_dead_until = now_ms() + 600000; mutex_unlock(&g_cache_mx);
+    uint64_t t2 = now_ms();
+    CHECK(doh_resolve_all("noroute.example",443,0,out,ol,DOH_MAX_ADDRS)==1 && V4(0)==0x5db8d830);
+    CHECK(now_ms() - t2 < 1500);
+    mutex_lock(&g_cache_mx); int dead = g_fwd_dead_until > now_ms(); mutex_unlock(&g_cache_mx);
+    CHECK(dead);
+    /* While it has no route, a name it does not answer at all waits only
+     * a moment for it. */
+    t2 = now_ms();
+    CHECK(doh_resolve_all("silent.example",443,0,out,ol,DOH_MAX_ADDRS)==1 && V4(0)==0x5db8d832);
+    CHECK(now_ms() - t2 < 1500);
+    /* "No route", then its answer after all: taken over the fallback's
+     * nothing (the system resolver does not know the name). */
+    t2 = now_ms();
+    CHECK(doh_resolve_all("late.example",443,0,out,ol,DOH_MAX_ADDRS)==1 && V4(0)==0x5db8d877);
+    CHECK(now_ms() - t2 < 2000);
+    /* A server failure (DNSSEC) is the answer even now: nothing else is
+     * asked, and the forwarder has answered, so it is waited for again. */
+    mutex_lock(&g_cache_mx); g_fwd_dead_until = now_ms() + 30000; mutex_unlock(&g_cache_mx);
+    asked = g_sys_asked;
+    CHECK(doh_resolve_all("bogus.example",443,0,out,ol,DOH_MAX_ADDRS)==-1 && g_sys_asked==asked);
+    mutex_lock(&g_cache_mx); dead = g_fwd_dead_until > now_ms(); mutex_unlock(&g_cache_mx);
+    CHECK(!dead);
+    /* A new network: the forwarder is waited for again. */
+    CHECK(doh_resolve_all("noroute2.example",443,0,out,ol,DOH_MAX_ADDRS)==1 && V4(0)==0x5db8d831);
+    doh_clear_cache();
+    mutex_lock(&g_cache_mx); dead = g_fwd_dead_until != 0; mutex_unlock(&g_cache_mx);
+    CHECK(!dead);
+    printf("  the forwarder's \"no route\": the fallback at once, not waited for: OK\n");
+    doh_set_local(NULL, 0);
+    #undef V4
+    fwd_stop(); }
+
+  if(fails==0){printf("ANTI-POISONING TESTS PASSED\n");return 0;}
+  printf("%d FAILED\n",fails);return 1;
+}

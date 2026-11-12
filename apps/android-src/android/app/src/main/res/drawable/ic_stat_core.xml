@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Status-bar icon: the OryvexVPN open orbit, white on transparent, heavy for 24dp. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="512"
+    android:viewportHeight="512">
+    <path
+        android:pathData="M391.91,262.76 A148.0,148.0 0 1,1 249.24,120.09"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="88.00"
+        android:strokeLineCap="round" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M343.32,116.68 a52.00,52.00 0 1,0 104.00,0 a52.00,52.00 0 1,0 -104.00,0 Z" />
+</vector>
