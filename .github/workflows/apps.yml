@@ -1,0 +1,502 @@
+name: apps
+
+# Builds every OryvexCore GUI package:
+#
+#   OryvexVPN-android-arm64-v8a.apk     modern phones (64-bit ARM)
+#   OryvexVPN-android-armeabi-v7a.apk   older / low-end phones (32-bit ARM)
+#   OryvexVPN-android-x86_64.apk        emulators, Chromebooks, Intel phones
+#   OryvexVPN-android-universal.apk     all of the above in one file
+#   OryvexVPN-windows-x64.zip           Flutter desktop app, Windows 10 / 11 64-bit
+#   OryvexVPN-windows-legacy-x64.zip    OryvexVPN Lite, Windows 7 / 8 / 10 / 11 64-bit
+#   OryvexVPN-windows-legacy-x86.zip    OryvexVPN Lite, Windows 7 / 8 / 10 / 11 32-bit
+#
+# Runs on its own for pull requests (artifacts on the run page), and is called by release.yml
+# on a version tag (auto-release.yml makes one on every push to main), which publishes everything.
+
+on:
+  # Pushes to main build through auto-release.yml -> release.yml, so they are not built twice here.
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+env:
+  FLUTTER_VERSION: "3.32.8"
+  # Android 5.0. Raise to 24 here if a dependency ever stops linking against API 21.
+  ANDROID_API: "21"
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # ------------------------------------------------------------------
+  # The core for each Android ABI, built with cargo-ndk against API 21
+  # and NDK r28 (16 KB page aligned), shipped as liboryvexcore_cli.so.
+  # ------------------------------------------------------------------
+  android-core:
+    name: Android core (${{ matrix.abi }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - abi: arm64-v8a
+            target: aarch64-linux-android
+          - abi: armeabi-v7a
+            target: armv7-linux-androideabi
+          - abi: x86_64
+            target: x86_64-linux-android
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: oryvexcore -> target
+          key: android-${{ matrix.abi }}
+
+      - uses: lukka/get-cmake@latest
+
+      - name: Install Android NDK
+        id: ndk
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: r28c
+
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk --locked
+
+      - name: Build core
+        id: build_core
+        env:
+          ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
+        run: bash apps/android-src/tool/build_android_natives.sh core ${{ matrix.abi }}
+
+      # GitHub artifact uploads can fail transiently with ECONNRESET. Retry with
+      # distinct names so a partially completed first attempt can't block a retry.
+      - name: Upload Android core artifact (attempt 1)
+        id: upload_core_artifact_1
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-android-core-${{ matrix.abi }}-attempt-1
+          path: apps/android-src/android/app/src/main/jniLibs
+          if-no-files-found: error
+
+      - name: Upload Android core artifact (attempt 2)
+        id: upload_core_artifact_2
+        if: ${{ steps.upload_core_artifact_1.outcome == 'failure' }}
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-android-core-${{ matrix.abi }}-attempt-2
+          path: apps/android-src/android/app/src/main/jniLibs
+          if-no-files-found: error
+
+      - name: Upload Android core artifact (attempt 3)
+        id: upload_core_artifact_3
+        if: ${{ steps.upload_core_artifact_2.outcome == 'failure' }}
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-android-core-${{ matrix.abi }}-attempt-3
+          path: apps/android-src/android/app/src/main/jniLibs
+          if-no-files-found: error
+
+      - name: Verify Android core artifact upload
+        if: ${{ always() && steps.build_core.outcome == 'success' }}
+        env:
+          UPLOAD_1: ${{ steps.upload_core_artifact_1.outcome }}
+          UPLOAD_2: ${{ steps.upload_core_artifact_2.outcome }}
+          UPLOAD_3: ${{ steps.upload_core_artifact_3.outcome }}
+        run: |
+          if [[ "$UPLOAD_1" != "success" && "$UPLOAD_2" != "success" && "$UPLOAD_3" != "success" ]]; then
+            echo "::error::Android core artifact upload failed after three attempts."
+            exit 1
+          fi
+
+  # ------------------------------------------------------------------
+  # hev-socks5-tunnel (whole-device VPN mode) for every ABI, plus the
+  # Java binding generated from the exact source that was compiled.
+  # ------------------------------------------------------------------
+  android-tun:
+    name: Android VPN engine
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install Android NDK
+        id: ndk
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: r28c
+
+      - name: Build hev-socks5-tunnel
+        env:
+          ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
+        run: bash apps/android-src/tool/build_android_natives.sh tun arm64-v8a armeabi-v7a x86_64
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-android-tun
+          path: |
+            apps/android-src/android/app/src/main/jniLibs
+            apps/android-src/android/app/src/main/java/hev/htproxy/TProxyService.java
+          if-no-files-found: error
+
+  # ------------------------------------------------------------------
+  # Flutter Android app: per-ABI APKs and one universal APK.
+  # ------------------------------------------------------------------
+  android-apk:
+    name: Android APKs
+    needs: [android-core, android-tun]
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/android-src
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Fetch core binaries
+        uses: actions/download-artifact@v4
+        with:
+          pattern: native-android-core-*
+          path: apps/android-src/android/app/src/main/jniLibs
+          merge-multiple: true
+
+      - name: Fetch VPN engine
+        uses: actions/download-artifact@v4
+        with:
+          name: native-android-tun
+          path: apps/android-src/android/app/src/main
+
+      - name: Check native libraries
+        run: |
+          find android/app/src/main/jniLibs -type f -exec ls -l {} \;
+          for abi in arm64-v8a armeabi-v7a x86_64; do
+            test -f "android/app/src/main/jniLibs/$abi/liboryvexcore_cli.so" || { echo "missing core for $abi"; exit 1; }
+            test -f "android/app/src/main/jniLibs/$abi/liboryvex_bypass.so" || { echo "missing bypass engine for $abi"; exit 1; }
+            test -f "android/app/src/main/jniLibs/$abi/libhev-socks5-tunnel.so" || { echo "missing VPN tunnel engine for $abi"; exit 1; }
+          done
+          test -f android/app/src/main/java/hev/htproxy/TProxyService.java || { echo "missing hev-socks5-tunnel binding"; exit 1; }
+          ls -l android/app/src/main/java/hev/htproxy/TProxyService.java
+
+      - name: Release signing (optional)
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > android/app/release.jks
+            {
+              echo "storeFile=release.jks"
+              echo "storePassword=$KEYSTORE_PASSWORD"
+              echo "keyAlias=$KEY_ALIAS"
+              echo "keyPassword=$KEY_PASSWORD"
+            } > android/key.properties
+            echo "signing with the release keystore"
+          else
+            echo "no keystore secret: APKs are signed with the debug key"
+          fi
+
+      - name: Bootstrap Flutter project
+        run: bash tool/bootstrap.sh
+
+      - name: Unit tests
+        run: |
+          (cd ../shared && flutter pub get && flutter test)
+          flutter test
+          (cd android && ./gradlew :app:testDebugUnitTest)
+
+      - name: Build APKs
+        run: |
+          flutter build apk --release --target-platform android-arm,android-arm64,android-x64
+          flutter build apk --release --split-per-abi --target-platform android-arm,android-arm64,android-x64
+
+      - name: Collect APKs
+        run: |
+          mkdir -p ../../dist
+          out=build/app/outputs/flutter-apk
+          cp "$out/app-release.apk"             ../../dist/OryvexVPN-android-universal.apk
+          cp "$out/app-arm64-v8a-release.apk"   ../../dist/OryvexVPN-android-arm64-v8a.apk
+          cp "$out/app-armeabi-v7a-release.apk" ../../dist/OryvexVPN-android-armeabi-v7a.apk
+          cp "$out/app-x86_64-release.apk"      ../../dist/OryvexVPN-android-x86_64.apk
+          ls -l ../../dist
+
+      - name: Verify APKs (signature, ABIs, minSdk)
+        run: |
+          bt=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          for f in ../../dist/*.apk; do
+            echo "== $f"
+            "$bt/apksigner" verify --verbose "$f" | grep -E "Verifies|v1 scheme|v2 scheme|v3 scheme"
+            "$bt/aapt" dump badging "$f" | grep -E "^sdkVersion|native-code"
+          done
+          "$bt/aapt" dump badging ../../dist/OryvexVPN-android-universal.apk | grep native-code | grep -q arm64-v8a || { echo "universal APK has no arm64"; exit 1; }
+          "$bt/aapt" dump badging ../../dist/OryvexVPN-android-universal.apk | grep "^sdkVersion:'21'" || { echo "minSdk is not 21"; exit 1; }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: OryvexVPN-android-apks
+          path: dist/*.apk
+          if-no-files-found: error
+
+  # ------------------------------------------------------------------
+  # Windows x64 core with Tor transports and Psiphon, for the Flutter app.
+  # ------------------------------------------------------------------
+  windows-core:
+    name: Windows core (x64)
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: oryvexcore
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: oryvexcore -> target
+          key: windows-x64
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+          # The Go tools are downloaded by the build scripts, not managed by a root go.mod.
+          cache: false
+
+      - uses: lukka/get-cmake@latest
+
+      - uses: ilammy/setup-nasm@v1
+
+      - name: Build pluggable transports
+        shell: bash
+        run: bash scripts/pt-build.sh windows amd64 "$PWD/pt" "" "$PWD/LICENSES"
+
+      - name: Build psiphon
+        shell: bash
+        run: bash scripts/psiphon-build.sh windows amd64 "$PWD/pt" "" "$PWD/LICENSES"
+
+      - uses: mlugg/setup-zig@v1
+        with:
+          version: 0.13.0
+
+      - name: Build bypass engine
+        shell: bash
+        run: bash bypass/build.sh windows x86_64 "$PWD/bypass-out"
+
+      - name: Build core
+        shell: bash
+        run: bash scripts/build-core.sh cargo build --release --target x86_64-pc-windows-msvc
+
+      - name: Collect licenses
+        shell: bash
+        run: |
+          cp ../LICENSE LICENSES/oryvexcore-LICENSE.txt
+          python -m unittest discover -s scripts/tests -v
+          python scripts/third-party-notices.py --target x86_64-pc-windows-msvc --features "${CORE_FEATURES_USED:-tor}" --output LICENSES/THIRD-PARTY-NOTICES.txt
+
+      - name: Stage
+        shell: bash
+        run: |
+          mkdir -p ../stage/core
+          cp target/x86_64-pc-windows-msvc/release/oryvexcore.exe ../stage/core/
+          cp bypass-out/oryvex-bypass.exe ../stage/core/
+          cp -R pt LICENSES ../stage/core/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-windows-core-x64
+          path: stage/core
+          if-no-files-found: error
+
+  # ------------------------------------------------------------------
+  # Flutter desktop app for Windows 10 / 11 x64, with the core bundled.
+  # ------------------------------------------------------------------
+  windows-app:
+    name: Windows app (x64)
+    needs: windows-core
+    # windows-latest now ships only Visual Studio 2026, which Flutter older than 3.38.2 cannot
+    # drive (CMake falls back to "Visual Studio 16 2019" and finds nothing). windows-2022 has
+    # VS 2022. If GitHub retires that image, bump FLUTTER_VERSION to 3.38.2+ and use windows-latest.
+    runs-on: windows-2022
+    defaults:
+      run:
+        working-directory: apps/desktop-src
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Fetch core
+        uses: actions/download-artifact@v4
+        with:
+          name: native-windows-core-x64
+          path: apps/desktop-src/core-bundle
+
+      - name: Bootstrap Flutter project
+        shell: pwsh
+        run: ./tool/bootstrap.ps1
+
+      - name: Build
+        run: flutter build windows --release
+
+      - name: Assemble bundle
+        shell: pwsh
+        run: |
+          $rel = "build/windows/x64/runner/Release"
+          if (-not (Test-Path "$rel/OryvexVPN.exe")) { Get-ChildItem $rel; throw "OryvexVPN.exe not found" }
+          New-Item -ItemType Directory -Force "$rel/core" | Out-Null
+          Copy-Item -Recurse -Force core-bundle/* "$rel/core/"
+          # Flutter's engine links the MSVC runtime dynamically: ship it beside the exe so a
+          # fresh Windows without the Visual C++ Redistributable still starts the app.
+          foreach ($dll in "msvcp140.dll", "vcruntime140.dll", "vcruntime140_1.dll") {
+            Copy-Item -Force "$env:WINDIR/System32/$dll" "$rel/"
+          }
+          Copy-Item ../../LICENSE "$rel/LICENSE.txt"
+          New-Item -ItemType Directory -Force ../../dist | Out-Null
+          Compress-Archive -Path "$rel/*" -DestinationPath ../../dist/OryvexVPN-windows-x64.zip -Force
+          Get-ChildItem ../../dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: OryvexVPN-windows-x64.zip
+          path: dist/OryvexVPN-windows-x64.zip
+          if-no-files-found: error
+
+      - name: Build installer (NSIS)
+        shell: pwsh
+        run: |
+          $nsis = "${env:ProgramFiles(x86)}\NSIS\makensis.exe"
+          if (-not (Get-Command makensis.exe -ErrorAction SilentlyContinue) -and -not (Test-Path $nsis)) {
+            choco install nsis -y --no-progress
+          }
+          ../../installer/windows/build-installer.ps1 -Source build/windows/x64/runner/Release -OutDir ../../dist
+          Get-ChildItem ../../dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: OryvexVPN-Setup-x64.exe
+          path: dist/OryvexVPN-Setup-*-x64.exe
+          if-no-files-found: error
+
+  # ------------------------------------------------------------------
+  # Windows 7 / 8 (and 10 / 11) in 32- and 64-bit: Flutter dropped
+  # Windows 7/8 after 3.19 and never shipped 32-bit Windows, so these
+  # get OryvexVPN Lite, a native Win32 GUI, and a core built for the
+  # *-win7-windows-msvc targets (nightly, -Z build-std). No Tor or
+  # Psiphon here: their Go helpers need Go 1.21+, which needs Windows 10.
+  # ------------------------------------------------------------------
+  windows-legacy:
+    name: Windows legacy (${{ matrix.arch }})
+    runs-on: windows-latest
+    # BoringSSL's CMake try-compile tree exceeds Windows' legacy path limit
+    # under the default nested Cargo target directory. Keep native build paths short.
+    env:
+      CARGO_TARGET_DIR: 'D:\t'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86
+            target: i686-win7-windows-msvc
+            zigarch: x86
+          - arch: x64
+            target: x86_64-win7-windows-msvc
+            zigarch: x86_64
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rust-src
+
+      - uses: lukka/get-cmake@latest
+
+      - uses: ilammy/setup-nasm@v1
+
+      - uses: mlugg/setup-zig@v1
+        with:
+          version: 0.13.0
+
+      - name: Build bypass engine
+        shell: bash
+        run: bash oryvexcore/bypass/build.sh windows ${{ matrix.zigarch }} "$PWD/bypass-out"
+
+      - name: Build core
+        working-directory: oryvexcore
+        run: cargo build --release --target ${{ matrix.target }} -Z build-std=std,panic_unwind
+
+      - name: Build OryvexVPN Lite
+        working-directory: apps/desktop-lite-src
+        run: cargo build --release --target ${{ matrix.target }} -Z build-std=std,panic_abort
+
+      - name: Package
+        shell: bash
+        run: |
+          out=stage/OryvexVPN-windows-legacy-${{ matrix.arch }}
+          cargo_target_dir="$(cygpath -u "$CARGO_TARGET_DIR")"
+          mkdir -p "$out/LICENSES"
+          cp "$cargo_target_dir/${{ matrix.target }}/release/oryvexcore.exe" "$out/"
+          cp bypass-out/oryvex-bypass.exe "$out/"
+          cp "$cargo_target_dir/${{ matrix.target }}/release/OryvexVPNLite.exe" "$out/"
+          cp oryvexcore/run-oryvexcore.bat "$out/"
+          cp LICENSE "$out/LICENSES/oryvexcore-LICENSE.txt"
+          (cd oryvexcore && python scripts/third-party-notices.py --target ${{ matrix.target }} --output "../$out/LICENSES/THIRD-PARTY-NOTICES.txt")
+          cat > "$out/README.txt" <<'TXT'
+          OryvexVPN Lite - for Windows 7, 8, 8.1, 10 and 11
+
+          1. Unzip this folder anywhere (keep the files together).
+          2. Run OryvexVPNLite.exe, pick a protocol and press Connect.
+          3. Point your browser at SOCKS5 127.0.0.1:1819, or tick
+             "Set the Windows system proxy" before connecting.
+
+          oryvexcore.exe is the command-line core; run-oryvexcore.bat starts it
+          in a console window if you prefer flags. Settings and identities are
+          kept in %APPDATA%\OryvexCore.
+
+          Windows 7 needs Service Pack 1 and update KB2533623 (both come with
+          Windows Update). Tor and Psiphon are not in the legacy build: use the
+          Windows 10/11 app (OryvexVPN-windows-x64.zip) for the Tor route.
+          TXT
+          cd stage && 7z a -tzip "../OryvexVPN-windows-legacy-${{ matrix.arch }}.zip" "OryvexVPN-windows-legacy-${{ matrix.arch }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: OryvexVPN-windows-legacy-${{ matrix.arch }}.zip
+          path: OryvexVPN-windows-legacy-${{ matrix.arch }}.zip
+          if-no-files-found: error

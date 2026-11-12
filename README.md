@@ -1,167 +1,154 @@
-# VexoStream
+<p align="center"><img src="branding/oryvexcore-logo.svg" width="128" alt="OryvexCore"></p>
 
-One repository for the existing VexoStream site, its Cloudflare Worker API, and a Flutter desktop client for Windows.
+<h1 align="center">OryvexVPN</h1>
+<p align="center"><b>A way out of filtered networks.</b><br>The OryvexCore engine, plus blue-and-black apps for Windows and Android.</p>
+
+<p align="center">
+  <a href="https://github.com/oryvexofficial/OryvexVPN/releases/latest">Download</a> ·
+  <a href="docs/GUIDE.md">Guide</a> ·
+  <a href="docs/TOR.md">Tor exits</a> ·
+  <a href="https://oryvexofficial.github.io/OryvexVPN/">Website</a> ·
+  <a href="docs/DOCS.md">Full reference</a> ·
+  <a href="docs/OPENWRT.md">OpenWrt</a>
+</p>
+
+---
+
+OryvexCore finds a route that works on your network, opens an encrypted tunnel through it and serves that tunnel as a local SOCKS5 proxy (or, on Android, a whole-device VPN). It is built for networks with deep packet inspection, protocol fingerprinting, UDP throttling and endpoint blocking.
+
+## Highlights
+
+- **Finds its own way out.** Scans for reachable gateways and only trusts one after real traffic passes through it.
+- **Four tunnels.** MASQUE over HTTP/3 or HTTP/2, classic WireGuard, WireGuard in MASQUE (`gool`) and MASQUE in MASQUE (`mim`) for a different exit address.
+- **MITM, no server.** Built-in domain fronting for YouTube/Google, Instagram, WhatsApp, Facebook, Reddit and other Fastly sites: no v2ray, no account. Makes a certificate authority on your device, which you trust once. See [docs/MITM.md](docs/MITM.md).
+- **Bypass, no tunnel.** A direct route that reshapes the first packets of every connection and resolves names itself, so filters that read the site name are fooled. Your address stays the same. On Windows the app automatically uses the Windows system proxy; Android can route the whole device through its VPN service (`--bypass`, see `oryvexcore/bypass/README.md`).
+- **Hard to fingerprint.** Chrome-shaped TLS, ClientHello fragmentation, obfuscation profiles from `light` to `gfw`.
+- **Extra exits.** Tor through the tunnel, Tor alone, or Psiphon through the tunnel (desktop).
+- **Stays up.** Automatic reconnect, and quick reconnect to the last gateway that worked.
+- **Verifies real traffic.** The app shows Connected once the core reports the tunnel and proxy are up. OryvexVPN never looks up your IP address or country.
+- **Tor as a route.** Built-in Tor (Arti) on Windows and Android with Auto, Fastest or a chosen exit country; the exit list is fetched through Tor itself.
+- **Runs anywhere.** Windows, Android, Linux, macOS, OpenWrt routers, Termux and Docker.
+
+## The apps
+
+| Platform | Download | What you get |
+| --- | --- | --- |
+| Android 5.0+ | `OryvexVPN-android-*.apk` | Whole-device VPN (VpnService + hev-socks5-tunnel) or proxy only |
+| Windows 10 / 11, 64-bit | `OryvexVPN-windows-x64.zip` | Desktop app; system proxy is automatic for Bypass and optional for other routes; Tor and Psiphon bundled |
+| Windows 7 / 8 / 10 / 11, 32 and 64-bit | `OryvexVPN-windows-legacy-*.zip` | OryvexVPN Lite, a tiny native Win32 app |
+
+### Bypass support by platform
+
+| Platform | How Bypass routes traffic |
+| --- | --- |
+| Android 5.0+ | Whole-device routing through Android's VPN service when that option is enabled; supported APK ABIs are arm64-v8a, armeabi-v7a and x86_64. |
+| Windows 10 / 11, x64 | The desktop app enables the per-user Windows system proxy automatically while Bypass is connected, then restores the previous setting. |
+| Windows 7 / 8 / 10 / 11, x86 and x64 | OryvexVPN Lite does the same through the Windows system proxy. |
+| Linux and macOS, CLI | Build/install `oryvexcore` and the native `oryvex-bypass` engine; clients must use the local proxy. There is no bundled GUI or whole-system VPN mode. |
+
+The Windows system proxy covers apps that honor Windows proxy settings, not every app or every network protocol. Apps that ignore it still need to use the local proxy explicitly.
+
+The desktop and Android apps share one design: a black canvas, Inter and JetBrains Mono type (bundled, no network fetch), and one blue for every action. While you connect, the Connect page shows each stage of the chosen protocol live (identity, gateway scan, tunnel, proxy, then Tor, Psiphon or the device VPN when they apply). **Activity** shows the core's log with level tags, folded repeats and one-tap copy.
+
+## Project layout
 
 ```text
-.
-├── site/                   Existing site + Cloudflare Worker source
-│   ├── src/                Pages, routing, account logic, API v1
-│   ├── assets/             Brand and provider assets
-│   ├── migrations/         Idempotent D1 migrations
-│   ├── scripts/            Worker build and tests
-│   └── wrangler.toml       Cloudflare routes and D1 bindings
-├── apps/                   Flutter Windows app source
-├── .github/workflows/      GitHub Actions builds the Windows app only
-├── README.md
-└── SECURITY.md
+OryvexVPN/
+├── oryvexcore/              the Rust core (CLI, library, C API)
+│   ├── bypass/              oryvex-bypass, the C engine behind --bypass
+│   ├── src/
+│   ├── vendor/quiche/       Cloudflare quiche, vendored (MASQUE / QUIC)
+│   └── scripts/             pt-build.sh, psiphon-build.sh, third-party-notices.py,
+│                            h2-bench.sh, oryvexcore.sh (Termux installer)
+├── apps/
+│   ├── shared/              Dart package: UI, theme, fonts, logo, core control
+│   ├── desktop-src/         Flutter app for Windows (windows/ runner, tool/bootstrap)
+│   ├── android-src/         Flutter app for Android (VpnService, tool/build_android_natives.sh)
+│   └── desktop-lite-src/    OryvexVPN Lite, native Win32 (Rust)
+├── branding/                logo (SVG + PNG)
+├── docs/                    guide, full reference, Tor exits, OpenWrt
+├── site/                    GitHub Pages website (pages.yml)
+├── license-texts/  tools/  .github/workflows/
+└── Dockerfile  LICENSE  NOTICE.md
 ```
 
-## What is included
+## Build
 
-### Site
+Everything is built by GitHub Actions (`.github/workflows/apps.yml` for the apps, `release.yml` for tagged releases). The release links and the in-app update check point at `oryvexofficial/OryvexVPN` (`apps/shared/lib/src/core/version.dart`); `tools/set-repo.sh <user>/<repo>` repoints them for a fork.
 
-The supplied VexoStream Tailwind v25 Worker source is under `site/`, including its original pages, provider settings, member sign-in, admin panel, status, social page, developers page, Check host, and media proxy. The site and app API are built together into one Cloudflare Worker.
-
-### Windows app
-
-`apps/` contains the Flutter desktop client and all app code. It includes an 18+ first-run confirmation, Home, Browse/Search, performer directory and profiles, native video playback with quality selection, account sign-in/sign-up, Status, Social, Developers/embed, and Check host pages. Bearer tokens are stored in Windows secure storage; account sessions can be revoked by signing out.
-
-The Windows runner and app build are generated by GitHub Actions. The `Build Windows app` workflow tests and builds Flutter only, never the site. It publishes a downloadable `VexoStream-Windows.zip` only when the Actions repository secret `APP_KEY` is configured; otherwise it builds for validation without publishing a runnable API release. Site Owner credentials work in the app login form too; Owner accounts get an Admin dashboard for maintenance, Core backend, default provider, and default search.
-
-### API
-
-Base URL: `https://api.vexostream.bond/api/v1`
-
-| Method | Endpoint | Purpose |
-| --- | --- | --- |
-| GET | `/health` | Worker/API health |
-| GET | `/config` or `/providers` | Provider list, default provider, account policy |
-| GET | `/catalog?provider=xvideos&q=trending&page=1` | Browse/search catalog |
-| GET | `/search?q=...&provider=...&page=1` | Search alias |
-| GET | `/models?gender=women&search=...&page=1` | Performer directory |
-| GET | `/models/{slug}` | Performer profile |
-| GET | `/image?url=...` | Proxied thumbnails, posters, and performer photos |
-| GET | `/posters?u=...` | Real video posters (og:image), up to 24 per call |
-| GET | `/status` | System and provider status |
-| GET | `/social` | Public social links and bots |
-| GET | `/developers` | Embed snippet and endpoint reference |
-| GET | `/check-host/nodes` | Available diagnostic nodes |
-| GET | `/check-host/start?host=...&type=http` | Start an authorized host check |
-| GET | `/check-host/result?id=...&type=http` | Poll a host check |
-| POST | `/auth/signup` | Create account, requires `username`, `password`, `passwordConfirm`, and `adult: true` |
-| POST | `/auth/login` | Create a member bearer session |
-| POST | `/auth/logout` | Revoke the current bearer session |
-| GET | `/account` | Read the signed-in account |
-| POST | `/videos/extract` | Resolve a supported video URL into Worker-proxied streams |
-
-Successful signup/login returns a 30-day bearer token. Send it as `Authorization: Bearer <token>` for protected endpoints. Only a SHA-256 hash is stored in D1. Passwords reuse the site's PBKDF2-SHA256 account handling. `EDGE_TOKEN` is never sent to the app.
-
-The API uses the existing site's policies: provider locks/hidden states are enforced, performer access follows the member setting, and stream extraction follows the login-to-watch setting. Check host is intentionally limited to VexoStream-owned hosts and explicitly authorized targets. It is not an unrestricted scanner.
-
-## Important backend dependency
-
-The provided site already forwards catalog, model, poster, and stream-extraction requests to VexoStream Core using the Worker `RAILWAY_URL`/`BACKEND_URL` setting and `EDGE_TOKEN`. This repository adds the complete app-facing Worker API and Flutter client, but it does **not** contain that separate Core extraction/catalog service. Keep the existing Core service available and configure the Worker to reach it; otherwise the app shell, accounts, status, and social pages work, but browsing and playback will not return catalogue results.
-
-## Push to GitHub
-
-1. Create an empty GitHub repository.
-2. Unzip this repository locally.
-3. Initialize Git, commit, and push the root contents. Example:
-
-   ```bash
-   git init
-   git add .
-   git commit -m "Add VexoStream site, API, and Windows app"
-   git branch -M main
-   git remote add origin https://github.com/OWNER/REPOSITORY.git
-   git push -u origin main
-   ```
-
-4. Open **Actions → Build Windows app**. It only tests/builds Flutter. To publish an API-ready Windows ZIP, configure the Actions repository secret `APP_KEY`; it never deploys the site.
-
-The repo is arranged so GitHub sees `site/`, `apps/`, `.github/`, and this README at the root. It does not contain a `.git` directory or your GitHub credentials.
-
-## Configure Cloudflare before deployment
-
-The `site/wrangler.toml` carries forward the zone and D1 IDs from the supplied archive. Confirm they belong to the Cloudflare account you intend to deploy to; replace the D1 IDs if you created different databases. Ensure the zone `vexostream.bond` is active in that account.
-
-Set Worker secrets in Cloudflare before deploying:
-
-- `STREAM_SIGN_SECRET`: a long, random secret used for signed sessions and media URLs.
-- `EDGE_TOKEN`: a separate long, random token shared with the configured VexoStream Core backend.
-- `APP_KEY`: a random app-access key. The Worker requires it in `X-App-Key` for every `/api/v1` request. Stream proxy URLs use their own short-lived signatures.
-- `TELEGRAM_BOT_TOKEN`: optional, only if the Telegram bot is enabled.
-- `ADMIN_USERS`: optional legacy bootstrap admins, if used.
-
-Set `APP_KEY` only as a Cloudflare Worker secret with `npx wrangler secret put APP_KEY` from `site/`. Site deployment remains manual; GitHub Actions never deploys the Worker. If you want Actions to package an API-ready Windows app, add the same value as the repository **secret** `APP_KEY`. The key is embedded in the desktop app and can be extracted, so it is not a durable secret. With no Actions secret, the workflow still builds the app for CI validation but intentionally publishes no API-ready release ZIP. Alternatively, build locally with `flutter build windows --release --dart-define=APP_KEY=<same-value>`.
-
-Set the Worker `RAILWAY_URL` (or `BACKEND_URL`) to the public HTTPS origin for the VexoStream Core service. Do not put `EDGE_TOKEN` in Flutter or in the repository. If using the admin panel's backend override, that saved value takes precedence over the Worker variable.
-
-The Worker serves these Cloudflare zone routes:
-
-- `vexostream.bond/*`
-- `www.vexostream.bond/*`
-- `api.vexostream.bond/*` for the API and media proxy
-
-The API uses a Worker **Route**, not a Custom Domain. Keep an existing proxied DNS record for `api` in the `vexostream.bond` zone; unlike a Custom Domain, a Route does not create DNS records or issue a separate certificate. `https://api.vexostream.bond/` and non-API website paths return plain 404s. `/api/v1` and image requests require `X-App-Key`; media proxy URLs use short-lived IP-bound signatures to support HLS subrequests. The Windows app tries `https://vexostream.bond/api/v1` first, then `https://api.vexostream.bond/api/v1`. Both route to the same Worker; the site hostname is preferred because it is the main proxied zone host. Use `--dart-define=VEXOSTREAM_API_BASE=...` only if you need another API origin.
-
-## Deploy site and API manually from Windows CMD
-
-The site is deployed from your own terminal with Wrangler. The repository includes the compiled `site/dist/worker.js`, so a first deploy does not fail on the missing entrypoint.
-
-1. Extract the ZIP and open Command Prompt.
-2. Enter the `site` subfolder. Example:
-
-   ```bat
-   cd /d C:\Users\CynetAdmin\Downloads\repo\site
-   ```
-
-   Replace `repo` with the name of the folder you extracted. Don’t deploy from the older `VexoStream-CheckHost-v22.2` directory if you want the new API and Windows app changes.
-
-3. Authenticate Wrangler once and deploy:
-
-   ```bat
-   npx wrangler login
-   npx wrangler deploy
-   ```
-
-4. Before first app use, apply the idempotent D1 API-session migration from `site/`:
-
-   ```bat
-   npx wrangler d1 execute DB --file=./migrations/2026-11-11-api-sessions.sql --remote
-   npx wrangler d1 execute DB --file=./migrations/2026-11-12-admin-api-sessions.sql --remote
-   ```
-
-   You can apply both before deploy. The Worker creates both tables lazily if needed.
-
-For any future source changes, rebuild then deploy:
-
-```bat
-npm install
-npm run build
-npx wrangler deploy
-```
-
-Wrangler does not run the source build automatically. `npx wrangler deploy` works from the supplied ZIP because the tested `dist/worker.js` is included; `npm run build` regenerates it after source edits. Normal GitHub pushes run Flutter tests and build the Windows app only. They do not build or deploy the site. A release ZIP is published only when the repository secret `APP_KEY` is set; otherwise the build is validation-only.
-
-`site/wrangler.toml` carries forward the zone and D1 IDs from the supplied archive. Confirm they belong to your Cloudflare account and replace them if you created different databases. Ensure `api.vexostream.bond` has a proxied DNS record in that zone for the Worker Route. Set `STREAM_SIGN_SECRET`, `EDGE_TOKEN`, and `APP_KEY` as Worker secrets, and configure `RAILWAY_URL`/`BACKEND_URL` to the separate VexoStream Core service. Authenticate with Wrangler locally, or use a Cloudflare API token in your terminal environment. Don’t commit credentials.
-
-## Local source checks
-
-The Windows app build is delegated to the single GitHub Actions workflow. It generates the Windows runner, resolves packages, runs the app API contract tests, and builds the app. It never deploys or builds the site. Add `APP_KEY` as a repository secret only if you want the workflow to publish an API-ready ZIP; without it, the build is CI validation only. For source-only checks, you can run:
+**Core** (Rust stable, a C/C++ compiler, CMake):
 
 ```bash
-cd site
-npm install
-npm test
-
-cd ../apps
-flutter pub get
-flutter test
+cd oryvexcore
+bash scripts/build-core.sh cargo build --release   # tor + exit-country, falls back on tor
+./target/release/oryvexcore --masque --turbo -4
 ```
 
-Use the GitHub Actions artifact for the Windows release build.
+**Desktop app** (Flutter 3.32.8, see `apps/shared/flutter-version.txt`):
 
-## App design
+```bash
+cd apps/desktop-src
+bash tool/bootstrap.sh                # or tool/bootstrap.ps1 on Windows
+flutter build windows --release
+# then copy the core to build/windows/x64/runner/Release/core/oryvexcore.exe (next to OryvexVPN.exe),
+# with the bypass engine beside it: bash ../../oryvexcore/bypass/build.sh windows x86_64 <dir>
+```
 
-The Windows app uses the site's v25 dark "night-screening room" tokens (ink surfaces, signal blue `#378EFF`, pill controls, 18px rounded surfaces, hairline rings), the Geist and Geist Mono fonts, the VexoStream logo and mark, and the same layout ideas: top bar with search, sidebar with libraries, the "Paste a link. Press play." hero, video cards with real posters and hover play, pill tabs, and site-style empty/error states. The Windows build workflow sets the VexoStream icon, window title, and `VexoStream.exe` name.
+**Android app** (Flutter, NDK r28, cargo-ndk):
+
+```bash
+cd apps/android-src
+bash tool/bootstrap.sh
+bash tool/build_android_natives.sh all   # core + VPN engine into android/app/src/main/jniLibs
+flutter build apk --release --split-per-abi
+```
+
+Optional release signing: add the `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` and `ANDROID_KEY_PASSWORD` secrets. Without them the APKs are signed with the debug key.
+
+**Windows installer**: after `flutter build windows --release` (and copying the core into `Release/core`), run `installer/windows/build-installer.ps1` with NSIS 3 installed (`winget install NSIS.NSIS`). Output: `dist/OryvexVPN-Setup-<version>-x64.exe`. See `installer/windows/README.md`.
+
+**Lite** (Windows, Rust nightly for Windows 7 targets): `cd apps/desktop-lite-src && cargo build --release`.
+
+## Command line
+
+```bash
+oryvexcore                                   # answer the questions as they come
+oryvexcore --masque --turbo -4               # nothing asked, straight to work
+oryvexcore --wg --thorough --noize gfw       # WireGuard on a strict network
+oryvexcore --gool                            # WireGuard inside MASQUE
+oryvexcore --mim --h2                        # MASQUE inside MASQUE over HTTP/2
+oryvexcore --masque --tor                    # plus a Tor exit on --tor-bind
+oryvexcore --tor-only --tor-exit fastest     # plain Tor, fastest exit country
+oryvexcore --bypass                          # no tunnel: direct, first packets reshaped
+oryvexcore --mitm                            # no tunnel, no server: domain fronting for Google, Meta, Fastly
+```
+
+Then point apps at `socks5h://127.0.0.1:1819`:
+
+```bash
+curl -x socks5h://127.0.0.1:1819 https://www.cloudflare.com/cdn-cgi/trace
+```
+
+Every flag has an environment variable; `oryvexcore help` lists them all. The proxy has no authentication: bind it to `0.0.0.0` only on a network you trust.
+
+## Docker
+
+```bash
+docker run -it -p 127.0.0.1:1819:1819 -v oryvexcore-data:/data ghcr.io/oryvexofficial/oryvexvpn:latest
+```
+
+Keep the `-v` volume: it holds your WARP identity, and a new identity on every start gets rate limited. Publish the port to `127.0.0.1` only.
+
+## Termux
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/oryvexofficial/OryvexVPN/main/oryvexcore/scripts/oryvexcore.sh -o oryvexcore.sh
+chmod +x oryvexcore.sh && ./oryvexcore.sh install
+```
+
+## Credits and license
+
+Created by **Muvixo**. MASQUE is built on Cloudflare's **quiche**. Fonts: Inter and JetBrains Mono (SIL OFL 1.1, see `apps/shared/fonts/OFL.txt`).
+
+
+AGPL-3.0. See [LICENSE](LICENSE) and [NOTICE.md](NOTICE.md).

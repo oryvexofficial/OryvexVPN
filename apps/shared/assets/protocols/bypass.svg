@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+  <defs>
+    <linearGradient id="ox-bypass-tile" x1="0" y1="0" x2="0" y2="48" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#19C7B0"/>
+      <stop offset="1" stop-color="#0B8A9E"/>
+    </linearGradient>
+  </defs>
+  <rect width="48" height="48" rx="13" fill="url(#ox-bypass-tile)"/>
+  <g transform="translate(8 8) scale(1.3333)"><g fill="none" stroke="#FFF" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7.5 3v5.4c0 4.6-3.1 7.9-7.5 9.6-4.4-1.7-7.5-5-7.5-9.6V6z"/><path d="M9.2 9.6l3 2.4-3 2.4"/><path d="M13.6 9.6l3 2.4-3 2.4"/></g></g>
+</svg>

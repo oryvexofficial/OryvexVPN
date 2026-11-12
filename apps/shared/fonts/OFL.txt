@@ -1,0 +1,8 @@
+Inter: Copyright (c) 2016 The Inter Project Authors (https://github.com/rsms/inter)
+JetBrains Mono: Copyright 2020 The JetBrains Mono Project Authors (https://github.com/JetBrains/JetBrainsMono)
+
+Both are licensed under the SIL Open Font License, Version 1.1 (https://openfontlicense.org).
+The files here are static instances cut from the Google Fonts variable fonts (Inter at opsz 14
+for text, opsz 32 for "InterDisplay"; JetBrains Mono), subset to Latin and common symbols.
+The OFL permits bundling, embedding and redistributing these fonts with software, provided
+the fonts are not sold on their own and this notice is kept.

@@ -1,0 +1,119 @@
+name: bug-scan
+# Runs every check the project has, never stops at the first failure, and gathers
+# ALL problems into one BUG-REPORT.md (job summary + downloadable artifact).
+# Run it by hand: Actions -> bug-scan -> Run workflow.
+on:
+  workflow_dispatch:
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: bug-scan-${{ github.ref }}
+  cancel-in-progress: true
+env:
+  CARGO_TERM_COLOR: never
+  FLUTTER_VERSION: "3.32.8"
+jobs:
+  scan:
+    name: Collect all bugs
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: mkdir -p scan-out
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            oryvexcore -> target
+            apps/desktop-lite-src -> target
+          key: bug-scan
+      - uses: lukka/get-cmake@latest
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      # ---- Rust: oryvexcore ----
+      - name: cargo check (all targets)
+        continue-on-error: true
+        working-directory: oryvexcore
+        run: cargo check --all-targets --message-format=json > ../scan-out/core-check.json 2> ../scan-out/core-check.stderr.log
+      - name: cargo check (tor feature)
+        continue-on-error: true
+        working-directory: oryvexcore
+        run: cargo check --lib --features tor --message-format=json > ../scan-out/core-check-tor.json 2> ../scan-out/core-check-tor.stderr.log
+      - name: cargo clippy
+        continue-on-error: true
+        working-directory: oryvexcore
+        run: cargo clippy --all-targets --message-format=json > ../scan-out/core-clippy.json 2> ../scan-out/core-clippy.stderr.log
+      - name: cargo test (every test, no early stop)
+        continue-on-error: true
+        working-directory: oryvexcore
+        run: cargo test --lib --no-fail-fast > ../scan-out/core-test.log 2>&1
+
+      # ---- Rust: desktop-lite ----
+      - name: cargo check desktop-lite
+        continue-on-error: true
+        working-directory: apps/desktop-lite-src
+        run: cargo check --message-format=json > ../../scan-out/lite-check.json 2> ../../scan-out/lite-check.stderr.log
+
+      # ---- Flutter ----
+      - name: flutter analyze (shared, android, desktop)
+        continue-on-error: true
+        run: |
+          for d in apps/shared apps/android-src apps/desktop-src; do
+            echo "== $d" >> scan-out/flutter-analyze.log
+            (cd "$d" && flutter pub get >/dev/null 2>&1; flutter analyze --no-fatal-infos --no-fatal-warnings 2>&1) >> scan-out/flutter-analyze.log || true
+          done
+      - name: flutter test
+        continue-on-error: true
+        run: |
+          for d in apps/shared apps/android-src apps/desktop-src; do
+            [ -d "$d/test" ] || continue
+            echo "== $d" >> scan-out/flutter-test.log
+            (cd "$d" && flutter test 2>&1) >> scan-out/flutter-test.log || true
+          done
+
+      # ---- Scripts, workflows, python ----
+      - name: Shell syntax
+        continue-on-error: true
+        run: |
+          for f in $(git ls-files '*.sh'); do bash -n "$f" 2>> scan-out/script-syntax.log; done
+          python3 -m py_compile $(git ls-files '*.py') 2>> scan-out/script-syntax.log || true
+          python3 tools/tests/test_static_routes.py >> scan-out/script-syntax.log 2>&1 || true
+      - name: shellcheck
+        continue-on-error: true
+        run: shellcheck -f tty $(git ls-files '*.sh') > scan-out/shellcheck.log 2>&1 || true
+      - name: actionlint
+        continue-on-error: true
+        run: |
+          bash <(curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
+          ./actionlint -color=false > scan-out/actionlint.log 2>&1 || true
+      - name: Files ignored by git but needed by the build
+        continue-on-error: true
+        run: |
+          # include_str!/include_bytes! targets that .gitignore would drop (the mitm_roots.pem bug)
+          grep -rhoE 'include_(str|bytes)!\("[^"]+"\)' --include=*.rs oryvexcore/src apps/desktop-lite-src/src | sed -E 's/.*\("(.*)"\)/\1/' | sort -u | while read -r rel; do
+            p=$(find oryvexcore/src apps/desktop-lite-src/src -name "$(basename "$rel")" | head -1)
+            if [ -z "$p" ]; then echo "include target missing from repo: $rel" >> scan-out/secrets.log
+            elif ! git ls-files --error-unmatch "$p" >/dev/null 2>&1; then echo "include target not tracked by git (check .gitignore): $p" >> scan-out/secrets.log; fi
+          done
+
+      - name: Build report
+        if: always()
+        run: |
+          python3 tools/bug_report.py scan-out | tee scan-out/summary.txt
+          cat scan-out/BUG-REPORT.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bug-report
+          path: scan-out/
+      - name: Fail if any error was found
+        if: always()
+        run: python3 -c "import json,sys; b=json.load(open('scan-out/bugs.json')); n=sum(x['level']=='error' for x in b); print(n,'errors'); sys.exit(1 if n else 0)"
