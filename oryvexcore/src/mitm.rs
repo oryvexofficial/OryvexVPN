@@ -447,18 +447,12 @@ pub fn dns_match(pattern: &str, name: &str) -> bool {
     let pattern = pattern.to_ascii_lowercase();
     let name = name.to_ascii_lowercase();
     if let Some(rest) = pattern.strip_prefix("*.") {
-        if name == rest {
-            return true;
-        }
-        if name.ends_with(&format!(".{rest}")) {
-            return true;
-        }
         match name.split_once('.') {
             Some((label, tail)) => !label.is_empty() && tail == rest,
             None => false,
         }
     } else {
-        pattern == name || name.ends_with(&format!(".{pattern}"))
+        pattern == name
     }
 }
 
@@ -485,7 +479,11 @@ fn verify_peer(ssl: &SslRef, allowed: &[&str], also: &str) -> Result<()> {
     };
     for gn in sans.iter() {
         if let Some(dns) = gn.dnsname() {
-            if dns_match(dns, also) || allowed.iter().any(|a| dns_match(dns, a) || dns_match(a, dns)) {
+            if dns_match(dns, also)
+                || suffix_in(also, &[dns])
+                || suffix_in(dns, &[also])
+                || allowed.iter().any(|a| dns_match(dns, a) || dns_match(a, dns) || suffix_in(dns, &[a]) || suffix_in(a, &[dns]))
+            {
                 return Ok(());
             }
         }
