@@ -1,3 +1,5 @@
+<p align="center"><img src="branding/oryvexcore-256.png" alt="OryvexVPN logo" width="128" height="128"></p>
+
 # OryvexVPN
 
 OryvexVPN is an open-source app for Windows and Android with multiple
@@ -15,7 +17,9 @@ The release workflow is configured to publish:
 - Android ARM64 APK for newer devices.
 - Android ARMv7 APK for older 32-bit ARM devices.
 
-The universal APK does not include x86 or x86_64. No Linux, macOS, OpenWrt,
+The universal APK is `OryvexVPN-android-universal.apk`: one install file for
+both ARM64 and ARMv7. Choose it if you are not sure which ARM version you have.
+It does not include x86 or x86_64. No Linux, macOS, OpenWrt,
 Termux, legacy Windows or Docker release jobs are included.
 
 ## How to use Fox
@@ -55,6 +59,14 @@ For Android release signing, provide `ANDROID_KEYSTORE_BASE64`,
 `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, and `ANDROID_KEY_PASSWORD`
 as repository secrets. The included fallback key is public and is **not
 suitable for trusted production releases**. Keep your private key out of Git.
+
+## Website assets
+
+The static website lives in `site/` and works as a self-contained GitHub Pages
+folder. It includes the same fonts, protocol icons and country flags as the app;
+see the notices in `site/assets/fonts/OFL.txt` and
+`site/assets/flags/ATTRIBUTION.md`. To preview locally, run
+`python3 -m http.server --directory site 8000` and open `http://localhost:8000`.
 
 ## License
 

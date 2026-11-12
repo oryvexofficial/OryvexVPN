@@ -91,7 +91,7 @@ android {
             // The core ships as an executable named liboryvexcore_cli.so. Android only lets an
             // app exec files from its extracted native library dir, so keep them extracted.
             useLegacyPackaging = true
-            // Never strip or drop ABIs: arm64 (Galaxy A52/A53 and most phones), arm32 (old/low-end), x86_64.
+            // Keep native libraries intact for the supported ARM64 and ARMv7 builds.
             pickFirsts.add("**/libc++_shared.so")
             keepDebugSymbols.add("**/liboryvexcore_cli.so")
         }

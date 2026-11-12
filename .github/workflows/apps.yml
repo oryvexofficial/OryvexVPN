@@ -239,7 +239,7 @@ jobs:
             } > android/key.properties
             echo "signing with the release keystore"
           else
-            echo "no keystore secret: APKs are signed with the debug key"
+            echo "no keystore secret: APKs are signed with the public fallback key, not suitable for production"
           fi
 
       - name: Bootstrap Flutter project
@@ -273,8 +273,14 @@ jobs:
             "$bt/apksigner" verify --verbose "$f" | grep -E "Verifies|v1 scheme|v2 scheme|v3 scheme"
             "$bt/aapt" dump badging "$f" | grep -E "^sdkVersion|native-code"
           done
-          "$bt/aapt" dump badging ../../dist/OryvexVPN-android-universal.apk | grep native-code | grep -q arm64-v8a || { echo "universal APK has no arm64"; exit 1; }
-          "$bt/aapt" dump badging ../../dist/OryvexVPN-android-universal.apk | grep "^sdkVersion:'24'" || { echo "minSdk is not 24"; exit 1; }
+          universal=../../dist/OryvexVPN-android-universal.apk
+          for abi in arm64-v8a armeabi-v7a; do
+            "$bt/aapt" dump badging "$universal" | grep '^native-code:' | grep -q "$abi" || { echo "universal APK has no $abi"; exit 1; }
+            for lib in liboryvexcore_cli.so liboryvex_bypass.so libhev-socks5-tunnel.so; do
+              unzip -l "$universal" "lib/$abi/$lib" | grep -q "lib/$abi/$lib" || { echo "universal APK is missing $abi/$lib"; exit 1; }
+            done
+          done
+          "$bt/aapt" dump badging "$universal" | grep "^sdkVersion:'24'" || { echo "minSdk is not 24"; exit 1; }
 
       - uses: actions/upload-artifact@v4
         with:
