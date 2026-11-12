@@ -1,0 +1,23 @@
+# Node / Cloudflare Worker
+site/node_modules/
+site/.wrangler/
+site/.build/
+*.log
+
+# Flutter / Dart
+apps/.dart_tool/
+apps/.packages
+apps/build/
+apps/.flutter-plugins
+apps/.flutter-plugins-dependencies
+apps/windows/flutter/ephemeral/
+apps/windows/flutter/generated_plugin_registrant.cc
+apps/windows/flutter/generated_plugins.cmake
+apps/VexoStream-Windows.zip
+
+# Secrets and local environment
+.env
+.env.*
+!.env.example
+.DS_Store
+Thumbs.db
