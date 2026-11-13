@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 13+ themed icon: the open orbit and its core, same geometry as the foreground. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="512"
+    android:viewportHeight="512">
+    <path
+        android:pathData="M323.66,246.34 A75.24000000000001,75.24000000000001 0 1,1 265.66,188.34"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="36.96"
+        android:strokeLineCap="round" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M302.68,188.20 a21.12,21.12 0 1,0 42.24,0 a21.12,21.12 0 1,0 -42.24,0 Z" />
+</vector>
