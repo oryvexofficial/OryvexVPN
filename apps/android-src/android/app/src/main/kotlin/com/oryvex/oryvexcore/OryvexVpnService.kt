@@ -199,6 +199,10 @@ class OryvexVpnService : VpnService() {
     }
 
     private fun startFoxTunnel(req: StartRequest) {
+        // Preflight the native engine before creating Android's VPN interface. The Fox route
+        // previously skipped the `available` check used by the core route and invoked JNI before
+        // System.loadLibrary, producing "No implementation found" on Android.
+        TunBridge.ensureAvailable()
         if (prepare(this) != null) error("VPN permission was not granted")
         val mtu = mobile.Mobile.tunMTU().takeIf { it > 0 } ?: 1500
         val config = mobile.Mobile.tunConfig(mtu)

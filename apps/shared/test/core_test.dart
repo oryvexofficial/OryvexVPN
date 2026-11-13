@@ -337,6 +337,33 @@ void main() {
     }
   });
 
+  test('release assets open the browser download URL, not GitHub API JSON', () {
+    const direct =
+        'https://github.com/oryvexofficial/OryvexVPN/releases/download/v1.1.26/OryvexVPN-Setup-1.1.26-x64.exe';
+    final release = ReleaseInfo.fromGitHub(jsonEncode({
+      'tag_name': 'v1.1.26',
+      'html_url': 'https://github.com/oryvexofficial/OryvexVPN/releases/tag/v1.1.26',
+      'assets': [
+        {
+          'url': 'https://api.github.com/repos/oryvexofficial/OryvexVPN/releases/assets/744851213',
+          'browser_download_url': direct,
+          'name': 'OryvexVPN-Setup-1.1.26-x64.exe',
+          'size': 123,
+        }
+      ],
+    }));
+
+    expect(release?.assets.single.url, direct);
+    expect(pickAsset(release!.assets, platform: 'windows')?.url, direct);
+    expect(
+      ReleaseAsset.fromJson({
+        'url': 'https://api.github.com/repos/oryvexofficial/OryvexVPN/releases/assets/744851213',
+        'name': 'OryvexVPN-Setup-1.1.26-x64.exe',
+      }),
+      isNull,
+    );
+  });
+
   test('partial settings import is rejected without changing existing settings', () async {
     final controller = CoreController(_TestBackend());
     controller.settings

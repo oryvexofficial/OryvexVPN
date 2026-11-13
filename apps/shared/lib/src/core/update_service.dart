@@ -24,10 +24,27 @@ class ReleaseAsset {
   static ReleaseAsset? fromJson(Object? raw) {
     if (raw is! Map) return null;
     final name = raw['name'];
-    final url = raw['url'] ?? raw['browser_download_url'];
+    // GitHub's `url` is the API metadata endpoint, which responds with JSON. Prefer the
+    // browser_download_url and only accept an actual release-download URL. This also drops
+    // cached API URLs saved by older app versions so they fall back to the release page.
+    final url = _downloadUrl(raw['browser_download_url']) ?? _downloadUrl(raw['url']);
     final size = raw['size'];
-    if (name is! String || url is! String || !url.startsWith('https://')) return null;
+    if (name is! String || url == null) return null;
     return ReleaseAsset(name: name, url: url, size: size is int ? size : 0);
+  }
+
+  static String? _downloadUrl(Object? raw) {
+    if (raw is! String) return null;
+    final uri = Uri.tryParse(raw);
+    if (uri == null ||
+        uri.scheme != 'https' ||
+        uri.host != 'github.com' ||
+        uri.userInfo.isNotEmpty ||
+        (uri.hasPort && uri.port != 443) ||
+        !uri.path.startsWith('/$kReleasesRepo/releases/download/')) {
+      return null;
+    }
+    return uri.toString();
   }
 }
 

@@ -15,6 +15,7 @@ import java.lang.reflect.Method
  */
 object TunBridge {
     private const val BINDING = "hev.htproxy.TProxyService"
+    private var loadFailure: Throwable? = null
 
     private val binding: Class<*>? by lazy {
         try {
@@ -26,11 +27,22 @@ object TunBridge {
 
     val available: Boolean by lazy {
         try {
+            if (binding == null) throw IllegalStateException("the VPN engine Java binding is missing")
             System.loadLibrary("hev-socks5-tunnel")
-            binding != null
-        } catch (_: Throwable) {
+            val probe = method("TProxyIsRunning")
+                ?: throw IllegalStateException("the VPN engine binding has no TProxyIsRunning")
+            if (call(probe) !is Boolean) throw IllegalStateException("the VPN engine JNI binding is invalid")
+            true
+        } catch (e: Throwable) {
+            loadFailure = e
             false
         }
+    }
+
+    fun ensureAvailable() {
+        if (available) return
+        val detail = loadFailure?.message?.let { ": $it" }.orEmpty()
+        throw IllegalStateException("the Android VPN engine could not be loaded$detail", loadFailure)
     }
 
     private fun method(name: String, vararg types: Class<*>): Method? =
@@ -48,6 +60,9 @@ object TunBridge {
         }
 
     fun start(configPath: String, fd: Int) {
+        // The Fox route calls start directly, unlike the core route which checks `available`
+        // first. Always load and verify the JNI library here before invoking a native method.
+        ensureAvailable()
         val m = method("TProxyStartService", String::class.java, Integer.TYPE)
             ?: throw IllegalStateException("the VPN engine binding has no TProxyStartService")
         val result = call(m, configPath, fd)
@@ -55,15 +70,19 @@ object TunBridge {
     }
 
     fun stop() {
+        if (!available) return
         try {
             method("TProxyStopService")?.let { call(it) }
         } catch (_: Throwable) {}
     }
 
     val running: Boolean
-        get() = try {
-            method("TProxyIsRunning")?.let { call(it) } == true
-        } catch (_: Throwable) {
-            false
+        get() {
+            if (!available) return false
+            return try {
+                method("TProxyIsRunning")?.let { call(it) } == true
+            } catch (_: Throwable) {
+                false
+            }
         }
 }

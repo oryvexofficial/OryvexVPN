@@ -1,5 +1,10 @@
 # OryvexVPN 1.0.0 (Created by Muvixo)
 
+## Unreleased: Android tunnel and updater fixes
+
+- Android Fox VPN now loads and probes the native tunnel before starting it, fixing the missing JNI implementation error.
+- Update buttons now use GitHub's direct release-download URL instead of the asset metadata API endpoint, and discard stale cached API URLs.
+
 ## Unreleased: Fox system proxy
 
 - Fox's Connect controls now include an optional **Set system proxy** switch on supported desktops. It keeps manual SOCKS5 setup available and restores the previous system proxy setting when Fox is turned off.
