@@ -12,6 +12,7 @@ import '../core/update_check.dart';
 import 'theme.dart';
 import 'widgets/brand.dart';
 import 'widgets/bypass_list.dart';
+import 'widgets/cloudflare_relay_setup.dart';
 import 'widgets/route_about.dart';
 import 'widgets/motion.dart';
 import 'widgets/section.dart';
@@ -277,6 +278,27 @@ class SettingsPage extends StatelessWidget {
                       ),
                     ],
                   ),
+                  if (s.foxOnly)
+                    OxSection(
+                      title: 'Fox connection',
+                      icon: Icons.public_rounded,
+                      footer: 'A personal relay carries Fox control-plane requests only. It does not carry general VPN traffic.',
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(18, 14, 18, 14),
+                          child: Text(
+                            'If Mozilla is blocked on your network, deploy a restricted Cloudflare Worker you control. The relay can see Fox sign-in and account requests, so use only your own Cloudflare account.',
+                            style: Ox.body(14, color: Ox.secondary),
+                          ),
+                        ),
+                        NavRow(
+                          title: 'Deploy Cloudflare relay',
+                          value: 'Cloudflare token',
+                          icon: Icons.cloud_upload_outlined,
+                          onTap: () => showCloudflareRelaySetup(context, backend: c.backend),
+                        ),
+                      ],
+                    ),
                   if (s.usesTorExit)
                     OxSection(
                       title: 'Tor',
@@ -423,7 +445,7 @@ class _Dirty extends StatelessWidget {
     final c = controller;
     final show = c.settingsDirty && c.isActive;
     return AnimatedSize(
-      duration: Ox.medium,
+      duration: context.reduceMotion ? Duration.zero : Ox.medium,
       curve: Ox.easeOut,
       alignment: Alignment.topCenter,
       child: !show

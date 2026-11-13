@@ -167,8 +167,10 @@ if ! git -c core.longpaths=true clone --quiet --depth 50 --branch "$branch" "$re
     exit 1
 fi
 
-git -C "$src" checkout --quiet "$commit" 2>/dev/null ||
-    echo "psiphon-build: pinned commit is gone, using $branch as it stands" >&2
+git -C "$src" checkout --quiet "$commit" 2>/dev/null || {
+    echo "psiphon-build: pinned commit $commit is unavailable; refusing to build moving branch $branch" >&2
+    exit 1
+}
 
 ext=""
 if [ "$goos" = "windows" ]; then

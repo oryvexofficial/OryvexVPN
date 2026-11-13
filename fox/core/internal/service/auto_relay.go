@@ -23,8 +23,8 @@ import (
 )
 
 const (
-	relayManifestURL    = "https://raw.githubusercontent.com/arman-org/update-manifests/main/arman-vpn-client/updates.json"
-	relayManifestMirror = "https://cdn.jsdelivr.net/gh/arman-org/update-manifests@main/arman-vpn-client/updates.json"
+	relayManifestURL    = "https://raw.githubusercontent.com/oryvexofficial/OryvexVPN/main/fox/core/updates.json"
+	relayManifestMirror = "https://cdn.jsdelivr.net/gh/oryvexofficial/OryvexVPN@main/fox/core/updates.json"
 	autoRelayBudget     = 20 * time.Second
 	relayProbeTimeout   = 4 * time.Second
 	maxRelayManifest    = 512 * 1024
@@ -209,7 +209,7 @@ func (a *automaticRelays) healthy(ctx context.Context, relay *url.URL, base http
 	}
 	valid := resp.StatusCode == http.StatusOK &&
 		json.NewDecoder(io.LimitReader(resp.Body, 4096)).Decode(&report) == nil &&
-		report.Relay == "arman-vpn" && report.Version == 1 && report.Ready
+		(report.Relay == "oryvex-vpn" || report.Relay == "arman-vpn") && report.Version == 1 && report.Ready
 	logx.Info("automatic relay health host=%s http=%d ready=%t", relay.Hostname(), resp.StatusCode, valid)
 	return valid
 }
@@ -277,7 +277,7 @@ func (a *automaticRelays) recover(req *http.Request) (*http.Response, error) {
 		}
 		resp, err := (&relayTransport{relay: u, base: base}).RoundTrip(out)
 		if resp != nil {
-			logx.Info("automatic relay Guardian response host=%s http=%d forwarded=%t", u.Hostname(), resp.StatusCode, resp.Header.Get("X-Arman-Relay") == "1")
+			logx.Info("automatic relay Guardian response host=%s http=%d forwarded=%t", u.Hostname(), resp.StatusCode, (resp.Header.Get("X-Oryvex-Relay") == "1" || resp.Header.Get("X-Arman-Relay") == "1"))
 		} else if err != nil {
 			logx.Info("automatic relay Guardian request failed host=%s", u.Hostname())
 		}
@@ -304,7 +304,7 @@ func (a *automaticRelays) recover(req *http.Request) (*http.Response, error) {
 }
 
 func usableGuardianRelayResponse(req *http.Request, resp *http.Response) bool {
-	if resp == nil || resp.Header.Get("X-Arman-Relay") != "1" {
+	if resp == nil || resp.Header.Get("X-Oryvex-Relay") != "1" && resp.Header.Get("X-Arman-Relay") != "1" {
 		return false
 	}
 	if req.Method == http.MethodHead && resp.StatusCode == http.StatusOK {

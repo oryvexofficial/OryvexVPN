@@ -51,9 +51,11 @@ object FoxBridge {
     /** Start the private service if needed, and send an authenticated local API request. */
     @Synchronized
     fun request(context: Context, method: String, path: String, body: String?): String {
-        val safeMethod = method in setOf("GET", "POST", "DELETE")
-        val safePath = path.matches(Regex("^/api/(status|accounts|locations|location|signin)(/[A-Za-z0-9_-]+){0,2}$"))
-        require(safeMethod && safePath) { "Unsupported Fox operation" }
+        val regularPath = path.matches(Regex("^/api/(status|accounts|locations|location|signin)(/[A-Za-z0-9_-]+){0,2}$"))
+        val settingsAccess = path == "/api/settings" && method in setOf("GET", "PUT")
+        val relayTestAccess = path == "/api/relay/test" && method == "POST"
+        val regularAccess = regularPath && method in setOf("GET", "POST", "DELETE")
+        require(settingsAccess || relayTestAccess || regularAccess) { "Unsupported Fox operation" }
         val port = configure(context)
         if (!mobile.Mobile.running()) mobile.Mobile.start(dataDir(context).absolutePath, false)
         val tokenFile = File(dataDir(context), "local-api.token")

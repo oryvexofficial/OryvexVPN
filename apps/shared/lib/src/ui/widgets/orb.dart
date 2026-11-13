@@ -100,11 +100,11 @@ class _ConnectOrbState extends State<ConnectOrb> with TickerProviderStateMixin {
       final nowOn = s == CoreState.connected;
       final wasOn = old.state == CoreState.connected;
       if (nowOn && !wasOn) {
-        _on.animateTo(1); // The painter applies the easing.
+        _on.animateTo(1, duration: _reduce ? Duration.zero : null); // The painter applies the easing.
         if (!_reduce) _burst.forward(from: 0);
         HapticFeedback.mediumImpact();
       } else if (!nowOn && wasOn) {
-        _on.animateTo(0, duration: const Duration(milliseconds: 650));
+        _on.animateTo(0, duration: _reduce ? Duration.zero : const Duration(milliseconds: 650));
       }
       if (wasHunting != isHunting) {
         _hunt.animateTo(
@@ -118,7 +118,7 @@ class _ConnectOrbState extends State<ConnectOrb> with TickerProviderStateMixin {
     final target = _targetProgress();
     if ((target - _progTarget).abs() > 0.001) {
       _progTarget = target;
-      _prog.animateTo(target, curve: Ox.easeOut);
+      _prog.animateTo(target, duration: _reduce ? Duration.zero : null, curve: Ox.easeOut);
     }
   }
 

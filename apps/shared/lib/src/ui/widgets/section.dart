@@ -294,33 +294,41 @@ class ChoicePills extends StatelessWidget {
       runSpacing: 8,
       children: [
         for (final e in options.entries)
-          Pressable(
+          Semantics(
+            button: true,
+            selected: e.key == value,
+            label: e.value,
             onTap: () => onChanged(e.key),
-            semanticLabel: e.value,
-            borderRadius: BorderRadius.circular(99),
-            child: AnimatedContainer(
-              duration: Ox.medium,
-              curve: Ox.easeOut,
-              padding: EdgeInsets.fromLTRB(icons?[e.key] != null ? 7 : 16, icons?[e.key] != null ? 6 : 9, 16, icons?[e.key] != null ? 6 : 9),
-              decoration: BoxDecoration(
-                color: e.key == value ? Ox.blueCta : Ox.field,
+            child: ExcludeSemantics(
+              child: Pressable(
+                onTap: () => onChanged(e.key),
+                semanticLabel: e.value,
                 borderRadius: BorderRadius.circular(99),
-                border: Border.all(color: e.key == value ? Ox.blueCta : Ox.hairlineSoft),
-              ),
-              child: AnimatedDefaultTextStyle(
-                duration: Ox.fast,
-                style: Ox.body(14,
-                    weight: e.key == value ? FontWeight.w600 : FontWeight.w500,
-                    color: e.key == value ? Colors.white : Ox.text),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (icons?[e.key] != null) ...[
-                      SvgPicture.asset(icons![e.key]!, package: 'oryvex_shared', width: 24, height: 24),
-                      const SizedBox(width: 8),
-                    ],
-                    Text(e.value),
-                  ],
+                child: AnimatedContainer(
+                  duration: context.reduceMotion ? Duration.zero : Ox.medium,
+                  curve: Ox.easeOut,
+                  padding: EdgeInsets.fromLTRB(icons?[e.key] != null ? 7 : 16, icons?[e.key] != null ? 6 : 9, 16, icons?[e.key] != null ? 6 : 9),
+                  decoration: BoxDecoration(
+                    color: e.key == value ? Ox.blueCta : Ox.field,
+                    borderRadius: BorderRadius.circular(99),
+                    border: Border.all(color: e.key == value ? Ox.blueCta : Ox.hairlineSoft),
+                  ),
+                  child: AnimatedDefaultTextStyle(
+                    duration: context.reduceMotion ? Duration.zero : Ox.fast,
+                    style: Ox.body(14,
+                        weight: e.key == value ? FontWeight.w600 : FontWeight.w500,
+                        color: e.key == value ? Colors.white : Ox.text),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (icons?[e.key] != null) ...[
+                          SvgPicture.asset(icons![e.key]!, package: 'oryvex_shared', width: 24, height: 24),
+                          const SizedBox(width: 8),
+                        ],
+                        Text(e.value),
+                      ],
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -441,8 +449,12 @@ class NavRow extends StatelessWidget {
               Icon(icon, size: 20, color: iconColor ?? Ox.blue),
               const SizedBox(width: 12),
             ],
-            Expanded(child: Text(title, style: Ox.body(16, weight: FontWeight.w500))),
-            if (value != null) Text(value!, style: Ox.body(15, color: Ox.secondary)),
+            Expanded(child: Text(title, maxLines: 2, overflow: TextOverflow.ellipsis, style: Ox.body(16, weight: FontWeight.w500))),
+            if (value != null)
+              Flexible(
+                child: Text(value!, maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.end,
+                    style: Ox.body(15, color: Ox.secondary)),
+              ),
             if (onTap != null) ...[
               const SizedBox(width: 6),
               Icon(Icons.chevron_right_rounded, color: Ox.tertiary, size: 22),
@@ -479,10 +491,23 @@ class FieldRow extends StatefulWidget {
 
 class _FieldRowState extends State<FieldRow> {
   late final TextEditingController _c = TextEditingController(text: widget.value);
+  late final FocusNode _focus = FocusNode();
+
+  @override
+  void didUpdateWidget(covariant FieldRow oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.value != widget.value && !_focus.hasFocus) {
+      _c.value = TextEditingValue(
+        text: widget.value,
+        selection: TextSelection.collapsed(offset: widget.value.length),
+      );
+    }
+  }
 
   @override
   void dispose() {
     _c.dispose();
+    _focus.dispose();
     super.dispose();
   }
 
@@ -492,6 +517,7 @@ class _FieldRowState extends State<FieldRow> {
       padding: const EdgeInsets.fromLTRB(18, 12, 18, 12),
       child: TextField(
         controller: _c,
+        focusNode: _focus,
         keyboardType: widget.number ? TextInputType.number : TextInputType.text,
         autocorrect: false,
         enableSuggestions: false,

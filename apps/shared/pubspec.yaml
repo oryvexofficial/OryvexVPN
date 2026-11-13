@@ -30,6 +30,7 @@ flutter:
     - assets/flags/
     - assets/protocols/
     - assets/services/
+    - assets/cloudflare/
   fonts:
     - family: Inter
       fonts:

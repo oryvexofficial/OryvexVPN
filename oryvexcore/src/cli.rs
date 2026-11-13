@@ -133,8 +133,8 @@ MASQUE transport:
 TLS:
   the TLS handshakes of the tunnel and its setup, MASQUE over HTTP/2 and HTTP/3,
   the calls to the WARP API and the DoH lookup of --ech-dns, have Chrome's
-  fingerprint as BoringSSL writes it, with what these change; certificates go
-  unchecked, but for the MASQUE gateway's with --team or --tls-verify
+  fingerprint as BoringSSL writes it. The WARP API and DoH authenticate their
+  certificates; MASQUE gateway connections require a matching bundled SPKI pin.
   --masque-sni <name>      the server name the MASQUE handshakes, over HTTP/3 and
                            HTTP/2, put in their ClientHello (default
                            www.cloudflare.com; the WARP client sends
@@ -142,9 +142,8 @@ TLS:
                            the :authority of the CONNECT request, stays
                            cloudflareaccess.com. With --ech it is the name
                            inside the encrypted ClientHello
-  --tls-verify             hold the certificate of the MASQUE gateway to the
-                           pins oryvexcore carries (on by default with --team;
-                           ORYVEXCORE_TLS_VERIFY=0 turns it off)
+  --tls-verify             compatibility option; MASQUE gateway SPKI pinning
+                           is always required and cannot be disabled
   --ech <auto|base64>      enable Encrypted Client Hello on the MASQUE handshakes
                            and the calls to the WARP API, with the key looked up
                            (auto) or given in base64; without a key it can
@@ -507,7 +506,7 @@ Environment variables:
   ORYVEXCORE_MASQUE_H2_FRAGMENT_SIZE   --fragment-size
   ORYVEXCORE_MASQUE_H2_FRAGMENT_DELAY  --fragment-delay
   ORYVEXCORE_MASQUE_SNI                --masque-sni
-  ORYVEXCORE_TLS_VERIFY                --tls-verify (on by default with --team)
+  ORYVEXCORE_TLS_VERIFY                compatibility only; MASQUE pinning is mandatory
   ORYVEXCORE_ECH                       --ech
   ORYVEXCORE_ECH_DNS                   --ech-dns
   ORYVEXCORE_ECH_DOMAIN                --ech-domain

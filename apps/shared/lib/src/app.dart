@@ -110,7 +110,7 @@ class _OryvexAppState extends State<OryvexApp> with WindowListener {
   Future<void> _initTray() async {
     try {
       final exe = File(Platform.resolvedExecutable).parent.path;
-      final icon = '$exe\\data\\flutter_assets\\assets\\app_icon.ico';
+      final icon = '$exe\\data\\flutter_assets\\packages\\oryvex_shared\\assets\\app_icon.ico';
       await _systemTray.initSystemTray(iconPath: icon, toolTip: 'OryvexVPN');
       final menu = Menu();
       await menu.buildFrom([

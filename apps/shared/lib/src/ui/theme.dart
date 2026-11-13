@@ -91,7 +91,7 @@ class Ox {
     blueWash = dark ? const Color(0x290A6CFF) : const Color(0x1A0A6CFF);
     text = dark ? const Color(0xFFF4F6FA) : const Color(0xFF111318);
     secondary = dark ? const Color(0xFFAEB7C6) : const Color(0xFF555B69);
-    tertiary = dark ? const Color(0xFF8590A2) : const Color(0xFF6E7482);
+    tertiary = dark ? const Color(0xFF8590A2) : const Color(0xFF626B7A);
     warn = dark ? const Color(0xFFFFB454) : const Color(0xFFB45309);
     tileShadow = dark
         ? const <BoxShadow>[]
@@ -191,6 +191,7 @@ class OxPageTransitionsBuilder extends PageTransitionsBuilder {
     Animation<double> secondaryAnimation,
     Widget child,
   ) {
+    if (context.reduceMotion) return child;
     final enter = CurvedAnimation(parent: animation, curve: Ox.easeOut, reverseCurve: Ox.easeIn);
     final behind = CurvedAnimation(parent: secondaryAnimation, curve: Ox.easeOut, reverseCurve: Ox.easeIn);
     return FadeTransition(

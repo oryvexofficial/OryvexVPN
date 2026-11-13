@@ -213,9 +213,9 @@ All four send Chrome's ClientHello as BoringSSL writes it: TLS 1.3 and 1.2, Chro
 cipher suites, GREASE values (RFC 8701), the extensions in a new order on every
 handshake, signed certificate timestamps and OCSP asked for. They offer `h2` then
 `http/1.1`, as Chrome does, but `h3` over QUIC, which carries TLS 1.3 alone; the
-HTTP/2 carrier speaks HTTP/2, which Cloudflare picks. Certificates are not checked,
-except the MASQUE gateway's with `--team` or `--tls-verify`, which must match one of
-OryvexCore's pins. Zero Trust sign-in, the Tor bridge and relay lists and the
+HTTP/2 carrier speaks HTTP/2, which Cloudflare picks. MASQUE gateways must match one
+of OryvexCore's bundled SPKI pins. WARP API and DNS-over-HTTPS connections check the
+certificate chain and server name. Zero Trust sign-in, the Tor bridge and relay lists and the
 exit-location lookup keep a TLS of their own. Sixteen options change the fingerprint
 of all four:
 
@@ -338,10 +338,9 @@ into a terminal or fed on standard input, which is how the desktop and Android
 clients answer it. You get three attempts. The resulting token is cached for the
 life of the process, so a reconnect does not ask again.
 
-Over MASQUE, `--team` holds the gateway's certificate to OryvexCore's pins, as
-`--tls-verify` does, so a middlebox cannot stand in for the gateway with a
-certificate of its own and see the traffic inside the tunnel. `ORYVEXCORE_TLS_VERIFY=0`
-turns the check off.
+Over MASQUE, every gateway certificate must match OryvexCore's bundled SPKI pins.
+This protects against a middlebox presenting a different certificate. Pin changes
+can require an app update; `ORYVEXCORE_TLS_VERIFY=0` cannot disable the check.
 
 `--gateway` sends HTTP and HTTPS through the organization's Gateway proxy so its
 filtering and logging apply. It is off by default because it adds a hop inside

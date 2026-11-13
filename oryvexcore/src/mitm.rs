@@ -457,6 +457,38 @@ pub fn dns_match(pattern: &str, name: &str) -> bool {
 }
 
 /// Does the certificate chain lead to a trusted root, and does it carry one of `allowed`?
+pub(crate) fn verify_public_peer(ssl: &SslRef, expected_name: &str) -> Result<()> {
+    let leaf = ssl.peer_certificate().ok_or_else(|| tls_err("the server sent no certificate"))?;
+    let empty;
+    let chain = match ssl.peer_cert_chain() {
+        Some(c) => c,
+        None => {
+            empty = Stack::<X509>::new().map_err(tls_err)?;
+            &*empty
+        }
+    };
+    let mut ctx = X509StoreContext::new().map_err(tls_err)?;
+    let trusted = ctx.init(roots(), &leaf, chain, |c| c.verify_cert()).map_err(tls_err)?;
+    if !trusted {
+        return Err(tls_err("the server certificate is not signed by a trusted authority"));
+    }
+    let Some(sans) = leaf.subject_alt_names() else {
+        return Err(tls_err("the server certificate names nothing"));
+    };
+    let expected_ip = expected_name.parse::<std::net::IpAddr>().ok().map(|ip| match ip {
+        std::net::IpAddr::V4(ip) => ip.octets().to_vec(),
+        std::net::IpAddr::V6(ip) => ip.octets().to_vec(),
+    });
+    let matches_name = sans.iter().any(|name| match &expected_ip {
+        Some(ip) => name.ipaddress().is_some_and(|value| value == ip.as_slice()),
+        None => name.dnsname().is_some_and(|value| dns_match(value, expected_name)),
+    });
+    if matches_name {
+        return Ok(());
+    }
+    Err(tls_err(format!("the server certificate is not for {expected_name}")))
+}
+
 fn verify_peer(ssl: &SslRef, allowed: &[&str], also: &str) -> Result<()> {
     let leaf = ssl.peer_certificate().ok_or_else(|| tls_err("the server sent no certificate"))?;
     let empty;
@@ -1119,5 +1151,19 @@ mod tests {
         let mut ctx = X509StoreContext::new().expect("a context");
         let ok = ctx.init(&store, &leaf, &chain, |c| c.verify_cert()).expect("a verdict");
         assert!(ok);
+    }
+}
+
+#[cfg(test)]
+mod strict_public_peer_name_tests {
+    use super::dns_match;
+
+    #[test]
+    fn public_certificate_names_use_exact_or_one_label_wildcards() {
+        assert!(dns_match("api.example.com", "API.EXAMPLE.COM"));
+        assert!(dns_match("*.example.com", "api.example.com"));
+        assert!(!dns_match("*.example.com", "a.b.example.com"));
+        assert!(!dns_match("*.example.com", "example.com"));
+        assert!(!dns_match("example.com.evil.test", "example.com"));
     }
 }

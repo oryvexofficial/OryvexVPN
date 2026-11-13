@@ -2,6 +2,26 @@ import 'dart:io';
 
 import 'package:flutter/services.dart';
 
+/// Uses an Android system browser Custom Tab for Cloudflare's own token page.
+/// On other platforms, or if Custom Tabs are unavailable, use the system browser.
+Future<bool> openCloudflareTemplate(String url) async {
+  final uri = Uri.tryParse(url);
+  if (uri == null || uri.scheme != 'https' || uri.host != 'dash.cloudflare.com' ||
+      uri.path != '/profile/api-tokens') return false;
+  if (Platform.isAndroid) {
+    try {
+      final opened = await const MethodChannel('oryvexcore/core')
+          .invokeMethod<bool>('openCloudflareTemplate', {'url': url});
+      if (opened == true) return true;
+    } on PlatformException {
+      // Fall back to the system browser.
+    } on MissingPluginException {
+      // Fall back to the system browser.
+    }
+  }
+  return openExternal(url);
+}
+
 /// Opens [url] in the default browser. Returns false when nothing could take it.
 Future<bool> openExternal(String url) async {
   final uri = Uri.tryParse(url);

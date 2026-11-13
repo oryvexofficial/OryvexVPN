@@ -957,17 +957,6 @@ pub fn insecure_http_clients() -> bool {
     )
 }
 
-fn verify_enabled() -> bool {
-    match std::env::var("ORYVEXCORE_TLS_VERIFY") {
-        Ok(value) => matches!(value.trim().to_lowercase().as_str(), "1" | "true" | "yes" | "on"),
-        Err(_) => team_run(),
-    }
-}
-
-fn team_run() -> bool {
-    std::env::var("ORYVEXCORE_TEAM").is_ok_and(|team| !team.trim().is_empty())
-}
-
 fn spki_sha256(cert: &boring::x509::X509Ref) -> Option<[u8; 32]> {
     let pubkey = cert.public_key().ok()?;
     let der = pubkey.public_key_to_der().ok()?;
@@ -982,16 +971,13 @@ pub fn install_verification(
     pin_endpoint: bool,
     expected_pins: &[&[u8]],
 ) -> Result<()> {
-    if !verify_enabled() {
-        builder.set_verify(SslVerifyMode::NONE);
-        announce_once(
-            "tls verification: disabled (--tls-verify enables pinning; on by default with --team)"
-                .to_string(),
-        );
-        return Ok(());
+    // The MASQUE tunnel carries credentials and user traffic: it must never silently
+    // fall back to an unauthenticated TLS session, including with legacy env flags.
+    if !pin_endpoint || expected_pins.is_empty() || expected_pins.iter().any(|pin| pin.len() != 32) {
+        return Err(OryvexCoreError::Tls("MASQUE gateway verification requires valid SHA-256 SPKI pins".to_string()));
     }
 
-    if pin_endpoint && !expected_pins.is_empty() {
+    {
         let pins: Vec<Vec<u8>> = expected_pins.iter().map(|p| p.to_vec()).collect();
         builder.set_custom_verify_callback(SslVerifyMode::PEER, move |ssl| {
             let leaf_cert = ssl.peer_certificate().ok_or_else(|| {
@@ -1014,11 +1000,6 @@ pub fn install_verification(
             "tls verification: pin-based ({} pins loaded)",
             expected_pins.len()
         ));
-    } else {
-        builder.set_verify(SslVerifyMode::NONE);
-        announce_once(
-            "tls verification: none (--tls-verify set but no pins configured)".to_string(),
-        );
     }
     Ok(())
 }
@@ -1464,31 +1445,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_zero_trust_run_verifies_the_gateway_unless_told_otherwise() {
-        static ENV: std::sync::Mutex<()> = std::sync::Mutex::new(());
-        let _held = ENV
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let clear = || {
-            for key in ["ORYVEXCORE_TEAM", "ORYVEXCORE_TLS_VERIFY"] {
-                std::env::remove_var(key);
-            }
-        };
-
-        clear();
-        assert!(!verify_enabled());
-
-        std::env::set_var("ORYVEXCORE_TEAM", "example");
-        assert!(verify_enabled());
-
-        std::env::set_var("ORYVEXCORE_TLS_VERIFY", "false");
-        assert!(!verify_enabled());
-
-        std::env::remove_var("ORYVEXCORE_TEAM");
-        std::env::set_var("ORYVEXCORE_TLS_VERIFY", "1");
-        assert!(verify_enabled());
-
-        clear();
+    fn masque_requires_valid_gateway_pins() {
+        let mut builder = SslContextBuilder::new(SslMethod::tls()).expect("TLS context");
+        assert!(install_verification(&mut builder, true, &[]).is_err());
+        assert!(install_verification(&mut builder, true, &[&[1u8; 31]]).is_err());
+        assert!(install_verification(&mut builder, false, &[&[1u8; 32]]).is_err());
+        assert!(install_verification(&mut builder, true, &[&[1u8; 32]]).is_ok());
     }
 
     /// The hold of a test on the session key, which the whole process shares: the tests that

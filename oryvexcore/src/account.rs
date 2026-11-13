@@ -717,7 +717,7 @@ async fn api_call_by(
             headers: &headers,
             body,
         };
-        let sent = crate::https::send_fragmented(
+        let sent = crate::https::send_fragmented_verified(
             &request,
             &fingerprint,
             ech.as_mut(),

@@ -386,7 +386,7 @@ async fn query_https(
         headers: &headers,
         body: Some(&query),
     };
-    let response = crate::https::send(&request, fingerprint, None, ECH_LOOKUP_TIMEOUT)
+    let response = crate::https::send_verified(&request, fingerprint, None, ECH_LOOKUP_TIMEOUT)
         .await
         .map_err(|e| OryvexCoreError::Ech(e.to_string()))?;
     if !(200..300).contains(&response.status) {

@@ -28,7 +28,7 @@ import (
 type program struct{ description, name string }
 
 var programs = map[string]program{
-	"core": {"OryvexVPN Fox Core", "arman-vpn-core"},
+	"core": {"OryvexVPN Fox Core", "fox-core"},
 	// The administrator prompt shows this description when the app
 	// installs the service.
 	"tun": {"OryvexVPN TUN", "arman-vpn-tun"},
@@ -73,7 +73,7 @@ func run(p program) error {
 		winversion.InternalName:     p.name,
 		// The publisher, as in the installer (AppPublisher) and the app.
 		winversion.CompanyName:    "OryvexVPN",
-		winversion.LegalCopyright: "Copyright (c) 2026 Arman",
+		winversion.LegalCopyright: "OryvexVPN Fox Core; upstream notices in LICENSES", 
 	} {
 		if err := vi.Set(winversion.LangDefault, key, value); err != nil {
 			return err

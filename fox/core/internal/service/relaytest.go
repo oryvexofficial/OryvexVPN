@@ -266,7 +266,7 @@ func (t *relayHealthTest) run(parent context.Context, raw string, emit func(rela
 		Version int    `json:"version"`
 		Ready   bool   `json:"ready"`
 	}
-	if len(body) > 8192 || json.Unmarshal(body, &health) != nil || health.Relay != "arman-vpn" || health.Version != 1 {
+	if len(body) > 8192 || json.Unmarshal(body, &health) != nil || health.Relay != "oryvex-vpn" && health.Relay != "arman-vpn" || health.Version != 1 {
 		report.add("health", "warning", "unsupported_health", "HTTP 200 was received, but the relay health response was not recognized. An older relay script or another page may be installed; update the relay script.")
 		return report.finish(false, host)
 	}

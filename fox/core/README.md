@@ -1,4 +1,4 @@
-# Arman VPN core
+# OryvexVPN Fox core (derived from Arman VPN)
 
 An unofficial Go client for Mozilla's Firefox VPN (IP Protection) service. It signs in with Firefox Accounts, obtains a Guardian ProxyPass, and serves a local SOCKS5 CONNECT proxy through Mozilla's Fastly HTTP/2 (or experimental HTTP/3) proxies. Several accounts can be stored; when the active one has used its quota threshold (95% by default; the last usable account goes on to the end of its quota), the next one takes over without dropping open connections. A built-in web dashboard manages accounts, settings, logs, and connection tests.
 

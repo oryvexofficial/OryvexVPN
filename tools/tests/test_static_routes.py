@@ -46,9 +46,34 @@ class SiteTests(unittest.TestCase):
 
     def test_homepage_has_fox_and_supported_downloads(self):
         text = (SITE / "index.html").read_text(encoding="utf-8")
-        for phrase in ("Fox", "unofficial client", "Windows", "Android", "ARM64", "ARMv7"):
+        for phrase in ("Fox", "unofficial client", "Windows", "Android"):
             self.assertIn(phrase, text)
+        downloads = (SITE / "downloads.html").read_text(encoding="utf-8")
+        for phrase in ("ARM64", "ARMv7", "x86", "Windows", "Android"):
+            self.assertIn(phrase, downloads)
         self.assertNotIn("assets/shots", text)
+        self.assertIn('class="mobile-nav"', text)
+        self.assertIn('id="relay"', text)
+        self.assertIn('static preview is not live availability data', text.lower())
+
+    def test_all_pages_have_valid_local_links(self):
+        pages = list(SITE.glob('*.html'))
+        self.assertGreaterEqual(len(pages), 4)
+        for page in pages:
+            parser = PageLinks()
+            parser.feed(page.read_text(encoding='utf-8'))
+            for link in parser.links:
+                parts = urlsplit(link)
+                if not link or parts.scheme or parts.netloc:
+                    continue
+                target = SITE / parts.path if parts.path else page
+                if parts.path in ('.', './'):
+                    target = SITE / 'index.html'
+                self.assertTrue(target.is_file(), (page.name, link))
+                if parts.fragment:
+                    target_parser = PageLinks()
+                    target_parser.feed(target.read_text(encoding='utf-8'))
+                    self.assertIn(parts.fragment, target_parser.ids, (page.name, link))
 
 
 if __name__ == "__main__":

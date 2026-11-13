@@ -159,8 +159,10 @@ trap 'rm -rf "$work"' EXIT
 src=""
 if git clone --quiet "$repo" "$work/lyrebird" 2>/dev/null; then
     src="$work/lyrebird"
-    git -C "$src" checkout --quiet "$commit" 2>/dev/null ||
-        echo "pt-build: pinned commit is gone, using the default branch" >&2
+    git -C "$src" checkout --quiet "$commit" 2>/dev/null || {
+        echo "pt-build: pinned Lyrebird commit $commit is unavailable; refusing to build a moving branch" >&2
+        exit 1
+    }
 else
     echo "pt-build: cannot reach gitlab, taking the go module proxy instead" >&2
     curl -fsSL "https://proxy.golang.org/$module/@v/$version.zip" -o "$work/lyrebird.zip"

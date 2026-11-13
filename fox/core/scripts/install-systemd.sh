@@ -119,7 +119,7 @@ ensure_user() {
 write_unit() {
   cat >"$UNIT_FILE" <<EOF
 [Unit]
-Description=Arman VPN SOCKS5 proxy and dashboard
+Description=OryvexVPN SOCKS5 proxy and dashboard
 After=network-online.target
 Wants=network-online.target
 
@@ -247,7 +247,7 @@ cmd_uninstall() {
   need_root
   if [ -t 0 ] && [ -t 1 ]; then
     local reply
-    printf '  Remove Arman VPN from this server? [y/N] '
+    printf '  Remove OryvexVPN from this server? [y/N] '
     read -r reply || reply=""
     case "$reply" in [yY]*) ;; *) printf '  Nothing removed.\n'; return 0 ;; esac
     printf '  Delete the accounts and settings too? [y/N] '
@@ -265,9 +265,9 @@ cmd_uninstall() {
     rm -f "$SELF"
   fi
   if [ "$PURGE" = "1" ]; then
-    done_ok "Arman VPN is removed, with its accounts and settings."
+    done_ok "OryvexVPN is removed, with its accounts and settings."
   else
-    done_ok "Arman VPN is removed; its accounts and settings stay in $DATA_DIR."
+    done_ok "OryvexVPN is removed; its accounts and settings stay in $DATA_DIR."
   fi
 }
 
@@ -278,7 +278,7 @@ cmd_status() {
   local active since auto=off
   active="$(systemctl is-active "${SERVICE_NAME}.service" 2>/dev/null || true)"
   [ "$(systemctl is-enabled "${SERVICE_NAME}.service" 2>/dev/null || true)" != enabled ] || auto=on
-  printf '\n  %s%sArman VPN%s\n' "$BOLD" "$FOX" "$OFF"
+  printf '\n  %s%sOryvexVPN%s\n' "$BOLD" "$FOX" "$OFF"
   printf '  %s──────────────────────────────────────────────────────%s\n' "$DIM" "$OFF"
   if [ "$active" = active ]; then
     since="$(systemctl show -p ActiveEnterTimestamp --value "${SERVICE_NAME}.service" 2>/dev/null || true)"
@@ -326,7 +326,7 @@ cmd_panel_info() {
   user="$(dashboard_field username "$cfg")"
   port="${listen##*:}"
   host="${listen%:*}"
-  printf '\n  %s%sArman VPN panel%s\n' "$BOLD" "$FOX" "$OFF"
+  printf '\n  %s%sOryvexVPN panel%s\n' "$BOLD" "$FOX" "$OFF"
   printf '  %s──────────────────────────────────────────────────────%s\n' "$DIM" "$OFF"
   case "$host" in
     127.* | localhost | "[::1]")
@@ -391,7 +391,7 @@ menu() {
   # Back to the menu after each command, until 0.
   while :; do
     cmds=()
-    printf '\n  %s%sArman VPN%s\n' "$BOLD" "$FOX" "$OFF"
+    printf '\n  %s%sOryvexVPN%s\n' "$BOLD" "$FOX" "$OFF"
     printf '%s\n' "$rule"
     menu_state
     printf '%s\n' "$rule"

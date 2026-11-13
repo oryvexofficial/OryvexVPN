@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.net.VpnService
 import android.os.Build
 import io.flutter.embedding.android.FlutterActivity
+import androidx.browser.customtabs.CustomTabsIntent
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
@@ -128,6 +129,16 @@ class MainActivity : FlutterActivity() {
                     "stop" -> {
                         OryvexVpnService.stop(this)
                         result.success(true)
+                    }
+                    "openCloudflareTemplate" -> {
+                        val uri = android.net.Uri.parse(call.argument<String>("url") ?: "")
+                        val permitted = uri.scheme == "https" && uri.host == "dash.cloudflare.com" &&
+                            uri.path == "/profile/api-tokens" && (uri.port == -1 || uri.port == 443)
+                        val opened = if (!permitted) false else try {
+                            CustomTabsIntent.Builder().build().launchUrl(this, uri)
+                            true
+                        } catch (_: Throwable) { false }
+                        result.success(opened)
                     }
                     "openUrl" -> {
                         val url = call.argument<String>("url") ?: ""

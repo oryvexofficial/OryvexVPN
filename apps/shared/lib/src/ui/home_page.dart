@@ -172,7 +172,7 @@ class _ConnectionPanel extends StatelessWidget {
     final strength = on ? 0.24 : (c.state.busy ? 0.15 : 0.07);
     final protocol = c.settings.protocol;
     return AnimatedContainer(
-      duration: Ox.slow,
+      duration: context.reduceMotion ? Duration.zero : Ox.slow,
       curve: Ox.easeInOut,
       decoration: BoxDecoration(
         color: Ox.tile,

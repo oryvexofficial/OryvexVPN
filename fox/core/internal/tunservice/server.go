@@ -13,6 +13,7 @@ import (
 	"net"
 	"net/netip"
 	"sync"
+	"time"
 
 	"github.com/armanlife/arman-vpn-client/core/internal/logx"
 	"github.com/armanlife/arman-vpn-client/core/internal/tun"
@@ -62,6 +63,9 @@ type device interface {
 	ResetFlows()
 	Close() error
 }
+
+const maxPreAuthConnections = 64
+const helloTimeout = 5 * time.Second
 
 // Server serves the protocol.
 type Server struct {
@@ -190,6 +194,11 @@ func (s *Server) serveConn(raw net.Conn) {
 		c.Close()
 		return
 	}
+	if len(s.conns) >= maxPreAuthConnections {
+		s.mu.Unlock()
+		c.Close()
+		return
+	}
 	s.conns[c] = struct{}{}
 	s.mu.Unlock()
 	defer func() {
@@ -201,7 +210,9 @@ func (s *Server) serveConn(raw net.Conn) {
 		c.Close()
 	}()
 
+	_ = raw.SetReadDeadline(time.Now().Add(helloTimeout))
 	hello, err := c.Receive()
+	_ = raw.SetReadDeadline(time.Time{})
 	if err != nil {
 		return
 	}

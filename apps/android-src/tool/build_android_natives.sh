@@ -28,7 +28,8 @@ ALL_ABIS=(arm64-v8a armeabi-v7a x86_64)
 CORE_FEATURES="${CORE_FEATURES:-tor tor-exit-country}"
 CORE_FALLBACK_FEATURES="${CORE_FALLBACK_FEATURES:-tor}"
 HEV_REPO="${HEV_REPO:-https://github.com/heiher/hev-socks5-tunnel}"
-HEV_REF="${HEV_REF:-}"
+HEV_REF="${HEV_REF:-2.19.3}"
+HEV_COMMIT="${HEV_COMMIT:-c5584feca8f6df70ee53eb2879e034b849a3d15a}"
 
 : "${ANDROID_NDK_HOME:=${ANDROID_NDK_ROOT:-}}"
 if [ -z "$ANDROID_NDK_HOME" ] || [ ! -d "$ANDROID_NDK_HOME" ]; then
@@ -94,7 +95,14 @@ build_tun() {
   echo "== hev-socks5-tunnel for ${abis[*]}"
   mkdir -p "$work/jni"
   echo 'include $(call all-subdir-makefiles)' > "$work/jni/Android.mk"
-  git clone --recursive --depth 1 ${HEV_REF:+--branch "$HEV_REF"} "$HEV_REPO" "$work/jni/hev-socks5-tunnel"
+  git clone --recursive --depth 1 --branch "$HEV_REF" "$HEV_REPO" "$work/jni/hev-socks5-tunnel"
+actual_hev_commit="$(git -C "$work/jni/hev-socks5-tunnel" rev-parse HEAD)"
+  if [ "$actual_hev_commit" != "$HEV_COMMIT" ]; then
+    echo "ERROR: hev-socks5-tunnel checkout does not match expected commit" >&2
+    rm -rf "$work"
+    return 1
+  fi
+  echo "hev-socks5-tunnel revision: $actual_hev_commit"
 
   python3 "$HERE/gen_tproxy_binding.py" \
     "$work/jni/hev-socks5-tunnel/src/hev-jni.c" \

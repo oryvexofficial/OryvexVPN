@@ -30,4 +30,6 @@ windows/flutter/ephemeral/
 core-bundle/
 
 # Fixed signing key so every build installs/updates over the last
-!android/app/oryvex-stable.jks
+
+# Never commit signing keys.
+android/app/*.jks

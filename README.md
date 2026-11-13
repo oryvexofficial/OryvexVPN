@@ -58,10 +58,34 @@ Manual workflow runs on a non-tag branch build artifacts without publishing.
 
 ## Release signing
 
-For Android release signing, provide `ANDROID_KEYSTORE_BASE64`,
+Tagged Android releases require `ANDROID_KEYSTORE_BASE64`,
 `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, and `ANDROID_KEY_PASSWORD`
-as repository secrets. The included fallback key is public and is **not
-suitable for trusted production releases**. Keep your private key out of Git.
+as repository secrets. No release signing key is included in this source.
+Non-release builds use the debug key and must not be published as production
+releases. Keep your private key out of Git.
+
+## Cloudflare Fox relay
+
+Select Fox, then open **Settings > Fox connection > Deploy Cloudflare relay**.
+The app uses the bundled Worker source, requests a scoped Cloudflare API token,
+deploys the Worker and secret, and saves its URL in Fox. Android opens the
+Cloudflare dashboard in a system Custom Tab; Windows uses the system browser.
+The token must be created by the user, scoped to the intended account, and pasted
+into the dialog. The Firefox sign-in WebView itself connects directly; the relay
+can carry the Fox backend's account and service requests, not general VPN traffic.
+The account owner can inspect relayed traffic, so use only your own account.
+See `fox/docs/relay/cloudflare/README.md` for the protocol and manual setup.
+
+## Windows release signing
+
+For tagged Windows releases, configure `WINDOWS_PFX_BASE64` and
+`WINDOWS_PFX_PASSWORD` as protected GitHub Actions secrets. These must contain
+your own trusted Authenticode code-signing certificate and private key. The
+release workflow signs and verifies the first-party Windows executables and the
+installer; pull-request artifacts remain unsigned when no credentials are set.
+The timestamping service and trust chain must be reachable during the release.
+Do not commit the certificate or private key. An Authenticode signature does not
+itself guarantee SmartScreen reputation.
 
 ## Website assets
 

@@ -85,7 +85,40 @@ pub async fn send_fragmented(
     timeout: Duration,
     fragment: FragmentConfig,
 ) -> Result<Response> {
-    tokio::time::timeout(timeout, exchange(request, fingerprint, ech, fragment))
+    send_fragmented_inner(request, fingerprint, ech, timeout, fragment, false).await
+}
+
+/// Sends ordinary HTTPS with certificate-chain and SNI hostname verification.
+pub async fn send_verified(
+    request: &Request<'_>,
+    fingerprint: &Fingerprint,
+    ech: Option<&mut Vec<u8>>,
+    timeout: Duration,
+) -> Result<Response> {
+    send_fragmented_verified(request, fingerprint, ech, timeout, FragmentConfig::disabled()).await
+}
+
+/// Sends HTTPS and verifies the certificate chain and the exact SNI hostname before writing any
+/// HTTP headers or body. Use this for authenticated requests and all production API calls.
+pub async fn send_fragmented_verified(
+    request: &Request<'_>,
+    fingerprint: &Fingerprint,
+    ech: Option<&mut Vec<u8>>,
+    timeout: Duration,
+    fragment: FragmentConfig,
+) -> Result<Response> {
+    send_fragmented_inner(request, fingerprint, ech, timeout, fragment, true).await
+}
+
+async fn send_fragmented_inner(
+    request: &Request<'_>,
+    fingerprint: &Fingerprint,
+    ech: Option<&mut Vec<u8>>,
+    timeout: Duration,
+    fragment: FragmentConfig,
+    verify_peer: bool,
+) -> Result<Response> {
+    tokio::time::timeout(timeout, exchange(request, fingerprint, ech, fragment, verify_peer))
         .await
         .map_err(|_| {
             OryvexCoreError::Api(format!(
@@ -101,6 +134,7 @@ async fn exchange(
     fingerprint: &Fingerprint,
     mut ech: Option<&mut Vec<u8>>,
     fragment: FragmentConfig,
+    verify_peer: bool,
 ) -> Result<Response> {
     let (address, port) = request.address.unwrap_or((request.host, request.port));
     let mut retried = false;
@@ -147,6 +181,16 @@ async fn exchange(
             }
         }
     };
+    // Authenticate the peer before sending any bearer token or API request body.
+    if verify_peer {
+        // Authenticate the HTTP authority, not only an optionally different SNI.
+        crate::mitm::verify_public_peer(tls.ssl(), request.host)?;
+        if let Some(sni) = request.sni {
+            if !sni.eq_ignore_ascii_case(request.host) {
+                crate::mitm::verify_public_peer(tls.ssl(), sni)?;
+            }
+        }
+    }
     // Nothing goes over a handshake that went without the key it was given.
     if ech.is_some() && !tls.ssl().ech_accepted() {
         return Err(OryvexCoreError::Ech("the handshake went without ECH".into()));

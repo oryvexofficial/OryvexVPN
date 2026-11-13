@@ -1,0 +1,7 @@
+name = "oryvex-fox-relay"
+main = "worker.js"
+compatibility_date = "2025-01-01"
+workers_dev = true
+
+# Set the secret with: npx wrangler secret put SECRET
+# Never commit a plaintext secret or API token.

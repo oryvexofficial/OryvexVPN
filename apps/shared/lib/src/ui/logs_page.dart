@@ -284,8 +284,8 @@ class _ToolButton extends StatelessWidget {
         semanticLabel: tooltip,
         borderRadius: BorderRadius.circular(99),
         child: Container(
-          width: 40,
-          height: 40,
+          width: 48,
+          height: 48,
           decoration: BoxDecoration(color: Ox.tile, shape: BoxShape.circle),
           child: Icon(icon, size: 19, color: Ox.blue),
         ),
