@@ -106,7 +106,7 @@ jobs:
             printf 'VALIDATION BUILD: APP_KEY was not configured. Protected API calls will not work.\n' > build/distribution/BUILD-INFO.txt
             echo '::warning::Validation build only: APP_KEY is missing, so this artifact cannot use the protected API.'
           fi
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: VexoStream-Android-universal-${{ steps.metadata.outputs.label }}-${{ steps.metadata.outputs.tag_name }}
           path: apps/flutterapp/build/distribution/*
@@ -220,14 +220,14 @@ jobs:
               Set-Content (Join-Path $dist 'BUILD-INFO.txt')
           }
       - name: Upload NSIS installer separately
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: VexoStream-Windows-NSIS-${{ steps.metadata.outputs.label }}-${{ steps.metadata.outputs.tag_name }}
           path: apps/flutterapp/installer/VexoStream-*-Setup.exe
           if-no-files-found: error
           retention-days: 30
       - name: Upload Windows bundle
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: VexoStream-Windows-bundle-${{ steps.metadata.outputs.label }}-${{ steps.metadata.outputs.tag_name }}
           path: apps/flutterapp/build/distribution/*
