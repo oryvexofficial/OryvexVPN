@@ -15,7 +15,7 @@
   "devDependencies": {
     "@tailwindcss/oxide": "^4.1.0",
     "tailwindcss": "^4.1.0",
-    "esbuild": "^0.25.11",
+    "esbuild": "^0.28.2",
     "prettier": "^3.6.2",
     "typescript": "^5.9.3",
     "wrangler": "^4.42.0"
