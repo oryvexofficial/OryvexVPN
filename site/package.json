@@ -1,0 +1,23 @@
+{
+  "name": "vexostream-edge-worker",
+  "version": "25.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "format": "prettier --write \"src/**/*.ts\" scripts package.json tsconfig.json",
+    "format:check": "prettier --check \"src/**/*.ts\" scripts package.json tsconfig.json",
+    "deploy": "npm test && wrangler deploy",
+    "check": "npm run build && node --check dist/worker.js",
+    "test": "npm run build && node --test scripts/test-checkhost.mjs scripts/test-api-v1.mjs scripts/test-app-stream.mjs scripts/test-app-models.mjs scripts/test-app-status.mjs scripts/test-app-search-default.mjs scripts/test-app-owner.mjs scripts/test-maintenance.mjs scripts/test-provider-embeds.mjs scripts/test-site-thumbnails.mjs scripts/test-embed-login-gate.mjs scripts/test-app-embed-grant.mjs",
+    "flags": "node scripts/fetch-flags.mjs"
+  },
+  "devDependencies": {
+    "@tailwindcss/oxide": "^4.1.0",
+    "tailwindcss": "^4.1.0",
+    "esbuild": "^0.25.11",
+    "prettier": "^3.6.2",
+    "typescript": "^5.9.3",
+    "wrangler": "^4.42.0"
+  }
+}

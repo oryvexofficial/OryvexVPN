@@ -1,0 +1,100 @@
+name: Build VexoStream apps
+
+on:
+  push:
+    branches: [main, master]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  flutter:
+    name: Flutter Windows app
+    runs-on: windows-latest
+    env:
+      APP_KEY: ${{ secrets.APP_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Generate Windows runner
+        working-directory: apps/flutterapp
+        shell: pwsh
+        run: |
+          if (!(Test-Path 'windows/CMakeLists.txt')) {
+            flutter create --platforms=windows --project-name=vexostream_app --org=bond.vexostream .
+          }
+      - name: Apply branding
+        working-directory: apps/flutterapp
+        shell: pwsh
+        run: |
+          Copy-Item 'branding/app_icon.ico' 'windows/runner/resources/app_icon.ico' -Force
+          if (Test-Path 'test/widget_test.dart') { Remove-Item 'test/widget_test.dart' -Force }
+          $main = Get-Content 'windows/runner/main.cpp' -Raw
+          $main = $main -replace 'L"vexostream_app"', 'L"VexoStream"'
+          $main = $main -replace 'Win32Window::Size size\(\d+, \d+\);', 'Win32Window::Size size(1360, 860);'
+          Set-Content 'windows/runner/main.cpp' $main -NoNewline
+          $cm = Get-Content 'windows/CMakeLists.txt' -Raw
+          $cm = $cm -replace 'set\(BINARY_NAME "[^"]*"\)', 'set(BINARY_NAME "VexoStream")'
+          if ($cm -notmatch 'target_compile_definitions\(webview_windows_plugin') {
+            $cm += "`r`nif(TARGET webview_windows_plugin)`r`n  target_compile_definitions(webview_windows_plugin PRIVATE _SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)`r`nendif()`r`n"
+          }
+          Set-Content 'windows/CMakeLists.txt' $cm -NoNewline
+      - name: Resolve Flutter packages
+        working-directory: apps/flutterapp
+        run: flutter pub get
+      - name: Test Flutter
+        working-directory: apps/flutterapp
+        run: flutter test
+      - name: Build Flutter with APP_KEY
+        if: env.APP_KEY != ''
+        working-directory: apps/flutterapp
+        shell: pwsh
+        run: flutter build windows --release --dart-define=APP_KEY=$env:APP_KEY
+      - name: Validate Flutter build without APP_KEY
+        if: env.APP_KEY == ''
+        working-directory: apps/flutterapp
+        run: flutter build windows --release
+      - name: Warn when APP_KEY is missing
+        if: env.APP_KEY == ''
+        run: echo '::warning::Flutter was built for validation only. Set the APP_KEY repository secret to publish an API-ready Flutter artifact.'
+      - name: Package Flutter app
+        if: env.APP_KEY != ''
+        working-directory: apps/flutterapp
+        shell: pwsh
+        run: Compress-Archive -Path 'build/windows/x64/runner/Release/*' -DestinationPath 'vexostreaapp_flutter.zip' -Force
+      - name: Install NSIS
+        if: env.APP_KEY != ''
+        run: choco install nsis --yes --no-progress
+      - name: Build NSIS installer
+        if: env.APP_KEY != ''
+        working-directory: apps/flutterapp
+        shell: pwsh
+        run: |
+          $versionLine = Select-String -Path 'pubspec.yaml' -Pattern '^version:\s*(\d+\.\d+\.\d+)\+(\d+)'
+          if (!$versionLine) { throw 'Could not read the Flutter app version from pubspec.yaml.' }
+          $version = "$($versionLine.Matches[0].Groups[1].Value).$($versionLine.Matches[0].Groups[2].Value)"
+          $makensisCommand = Get-Command makensis.exe -ErrorAction SilentlyContinue
+          if ($makensisCommand) {
+            $makensisPath = $makensisCommand.Source
+          } else {
+            $makensisPath = 'C:\Program Files (x86)\NSIS\makensis.exe'
+          }
+          if (!(Test-Path $makensisPath)) {
+            throw "NSIS compiler not found at $makensisPath"
+          }
+          & $makensisPath "/DPRODUCT_VERSION=$version" 'installer\VexoStream.nsi'
+      - uses: actions/upload-artifact@v4
+        if: env.APP_KEY != ''
+        with:
+          name: VexoStream-Windows
+          path: |
+            apps/flutterapp/vexostreaapp_flutter.zip
+            apps/flutterapp/VexoStream-*-Setup.exe
+          if-no-files-found: error
+          retention-days: 30

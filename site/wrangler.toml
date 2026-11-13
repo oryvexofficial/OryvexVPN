@@ -1,0 +1,86 @@
+# ============================================================================
+# VexoStream — Cloudflare Worker Configuration (D1 edition)
+# ============================================================================
+
+name = "odd-bar-b403"
+main = "dist/worker.js"
+compatibility_date = "2024-11-01"
+compatibility_flags = ["nodejs_compat", "allow_custom_ports"]
+
+# ----------------------------------------------------------------------------
+# Zone routes
+# ----------------------------------------------------------------------------
+routes = [
+  { pattern = "vexostream.bond/*",     zone_name = "vexostream.bond" },
+  { pattern = "www.vexostream.bond/*", zone_name = "vexostream.bond" },
+  # API subdomain route. Keep a proxied DNS record for api in the zone.
+  { pattern = "api.vexostream.bond/*", zone_name = "vexostream.bond" }
+]
+
+# ----------------------------------------------------------------------------
+# D1 Database — DB
+# Stores admin settings (maintenance mode, etc.)
+# ----------------------------------------------------------------------------
+# Create once:
+#     npx wrangler d1 create vexostream
+# Then paste the returned database_id below.
+# ----------------------------------------------------------------------------
+[[d1_databases]]
+binding       = "DB"
+database_name = "vexostream"
+database_id   = "9b39989c-aa87-4396-9c9c-8d4d958ff5b9"
+
+# ----------------------------------------------------------------------------
+# D1 Database — STATUS
+# Stores status data.
+# ----------------------------------------------------------------------------
+# Create once:
+#     npx wrangler d1 create STATUS
+# Then paste the returned database_id below.
+# ----------------------------------------------------------------------------
+[[d1_databases]]
+binding       = "STATUS"
+database_name = "STATUS"
+database_id   = "ded00b6c-36e0-49cf-90b1-cd8550ffeb79"
+
+# ----------------------------------------------------------------------------
+# Vars & observability
+# ----------------------------------------------------------------------------
+[vars]
+ENVIRONMENT = "production"
+# Backend URL: http or https, optional port. No scheme = http://
+# RAILWAY_URL = "https://api.example.com"
+# RAILWAY_URL = "http://api.example.com:8000"
+# (BACKEND_URL is accepted as an alias)
+# IP backends are fetched via <ip>.sslip.io (Workers block raw IPs).
+# BACKEND_IP_RESOLVER = "sslip.io"   # or "nip.io", or "off"
+# Check host: regional probe provider. auto = Check-Host.net, then Globalping.
+# CHECK_HOST_PROVIDER = "auto"        # or "check-host", "globalping", "edge"
+# CHECK_HOST_ALLOWED_HOSTS = "vexostream.bond"   # extra authorized roots/IPs only
+# CHECK_HOST_ALLOWED_PORTS = "80,443"
+
+# Status history: one health snapshot every 5 minutes
+[triggers]
+crons = ["*/5 * * * *"]
+
+# Secrets (recommended, then rotate the old values):
+#   npx wrangler secret put TELEGRAM_BOT_TOKEN
+#   npx wrangler secret put STREAM_SIGN_SECRET
+#   npx wrangler secret put EDGE_TOKEN
+#   npx wrangler secret put ADMIN_USERS     # {"name":"<sha256 of password>"}
+#   npx wrangler secret put GLOBALPING_TOKEN   # optional, Check host fallback quota
+
+[observability]
+enabled = true
+
+[observability.logs]
+invocation_logs = true
+
+# ----------------------------------------------------------------------------
+# Optional: shared rate limiter (stronger than the built-in per-isolate limit)
+# Uncomment if your account has the Workers Rate Limiting binding.
+# ----------------------------------------------------------------------------
+# [[ratelimits]]
+# name = "RATE_LIMITER"
+# namespace_id = "1001"
+# simple = { limit = 120, period = 60 }
