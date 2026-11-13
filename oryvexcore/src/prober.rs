@@ -796,6 +796,10 @@ async fn verify_one(
         path: probe.path.clone(),
         cert_pem: probe.cert_pem.to_vec(),
         key_pem: probe.key_pem.to_vec(),
+        expected_pins: crate::consts::MASQUE_PINS
+            .iter()
+            .map(|pin| pin.to_vec())
+            .collect(),
         ech_config_list: probe.ech_config_list.as_ref().map(|a| a.to_vec()),
         noize: probe.noize.clone(),
         timeout,

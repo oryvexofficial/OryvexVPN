@@ -405,6 +405,58 @@ fn roots() -> &'static X509Store {
     })
 }
 
+#[cfg(test)]
+static TEST_TRUST_ANCHORS: OnceLock<Mutex<Vec<Vec<u8>>>> = OnceLock::new();
+
+/// Register an ephemeral self-signed test server certificate as a test-only trust anchor.
+/// Production trust roots and verification are unchanged.
+#[cfg(test)]
+pub(crate) fn register_test_trust_anchor(cert: &X509) {
+    TEST_TRUST_ANCHORS
+        .get_or_init(|| Mutex::new(Vec::new()))
+        .lock()
+        .expect("test trust anchors")
+        .push(cert.to_pem().expect("test certificate PEM"));
+}
+
+#[cfg(test)]
+fn test_roots() -> X509Store {
+    let mut builder = X509StoreBuilder::new().expect("a certificate store");
+    if let Ok(certs) = X509::stack_from_pem(ROOTS_PEM.as_bytes()) {
+        for cert in certs {
+            let _ = builder.add_cert(cert);
+        }
+    }
+    let anchors = TEST_TRUST_ANCHORS
+        .get_or_init(|| Mutex::new(Vec::new()))
+        .lock()
+        .expect("test trust anchors")
+        .clone();
+    for pem in anchors {
+        if let Ok(certs) = X509::stack_from_pem(&pem) {
+            for cert in certs {
+                let _ = builder.add_cert(cert);
+            }
+        }
+    }
+    builder.build()
+}
+
+fn chain_is_trusted(leaf: &X509, chain: &Stack<X509>) -> Result<bool> {
+    let mut ctx = X509StoreContext::new().map_err(tls_err)?;
+    #[cfg(test)]
+    {
+        let store = test_roots();
+        ctx.init(&store, leaf, chain, |context| context.verify_cert())
+            .map_err(tls_err)
+    }
+    #[cfg(not(test))]
+    {
+        ctx.init(roots(), leaf, chain, |context| context.verify_cert())
+            .map_err(tls_err)
+    }
+}
+
 #[derive(Clone, Copy)]
 enum Alpn {
     None,
@@ -467,8 +519,7 @@ pub(crate) fn verify_public_peer(ssl: &SslRef, expected_name: &str) -> Result<()
             &*empty
         }
     };
-    let mut ctx = X509StoreContext::new().map_err(tls_err)?;
-    let trusted = ctx.init(roots(), &leaf, chain, |c| c.verify_cert()).map_err(tls_err)?;
+    let trusted = chain_is_trusted(&leaf, chain)?;
     if !trusted {
         return Err(tls_err("the server certificate is not signed by a trusted authority"));
     }
@@ -499,10 +550,7 @@ fn verify_peer(ssl: &SslRef, allowed: &[&str], also: &str) -> Result<()> {
             &*empty
         }
     };
-    let mut ctx = X509StoreContext::new().map_err(tls_err)?;
-    let trusted = ctx
-        .init(roots(), &leaf, chain, |c| c.verify_cert())
-        .map_err(tls_err)?;
+    let trusted = chain_is_trusted(&leaf, chain)?;
     if !trusted {
         return Err(tls_err("the server certificate is not signed by a trusted authority"));
     }

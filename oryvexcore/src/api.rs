@@ -519,7 +519,15 @@ pub async fn verify_endpoint(
         Transport::Masque => {
             // The check offers the job's ECH key, as its tunnel would.
             let ech = spec.ech.clone();
-            let attempt = async { Ok(crate::quick_verify_masque_peer(identity, peer, ech).await) };
+            let attempt = async {
+                Ok(crate::quick_verify_masque_peer(
+                    identity,
+                    peer,
+                    ech,
+                    crate::masque_pins(),
+                )
+                .await)
+            };
             guard(cancel, attempt).await
         }
         Transport::WireGuard => {

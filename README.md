@@ -8,6 +8,16 @@ connection routes, including Tor and Fox.
 Fox is an unofficial Firefox Account VPN client. It is not made, endorsed or
 supported by Mozilla. A Firefox Account with service access is required.
 
+## App preview
+
+[Watch the full app preview](site/video/oryvexvpn-preview.mp4) · [Interactive preview source](site/preview/index.html)
+
+The preview is a visual simulation based on the app source, not a working VPN.
+It does not connect, sign in, deploy a relay, or show live traffic or locations.
+Actual controls vary by platform and selected route. To try the interactive
+preview, serve the `site/` folder locally as described below and open
+`/preview/index.html`. The walkthrough video has no audio.
+
 ## Downloads
 
 The release workflow is configured to publish:

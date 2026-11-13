@@ -1464,12 +1464,20 @@ fn lastconn_path(config_path: &str) -> String {
     derive_sibling_path(config_path, "lastconn")
 }
 
+fn masque_pins() -> Vec<Vec<u8>> {
+    consts::MASQUE_PINS
+        .iter()
+        .map(|pin| pin.to_vec())
+        .collect()
+}
+
 /// Whether `peer` serves MASQUE, by a quick check on the carrier the session uses, which
 /// offers `ech`: the session's key, or that of a job of the library.
 async fn quick_verify_masque_peer(
     identity: &account::Identity,
     peer: SocketAddr,
     ech: Option<Vec<u8>>,
+    expected_pins: Vec<Vec<u8>>,
 ) -> bool {
     // The core checks the name as it starts; a job of the library given no domain name fails
     // every check here.
@@ -1487,6 +1495,7 @@ async fn quick_verify_masque_peer(
         path: quic::default_path().to_string(),
         cert_pem: identity.cert_pem.clone(),
         key_pem: identity.key_pem.clone(),
+        expected_pins: expected_pins.clone(),
         ech_config_list: ech.clone(),
         noize: noize_config(),
         timeout: std::time::Duration::from_secs(5),
@@ -1504,7 +1513,7 @@ async fn quick_verify_masque_peer(
             local_ipv4: parse_local_v4(&identity.ipv4),
             quiet: true,
             pin_endpoint: true,
-            expected_pins: consts::MASQUE_PINS.iter().map(|p| p.to_vec()).collect(),
+            expected_pins,
             ech_config_list: ech,
         };
         return masque_h2::verify_h2(&cfg, std::time::Duration::from_secs(5))
@@ -1547,7 +1556,14 @@ async fn run_masque(
             .and_then(|value| value.parse::<SocketAddr>().ok())
         {
             log::info!("[*] verifying the endpoint the organization assigned: {assigned}");
-            if quick_verify_masque_peer(&identity, assigned, tls::session_ech()).await {
+            if quick_verify_masque_peer(
+                &identity,
+                assigned,
+                tls::session_ech(),
+                masque_pins(),
+            )
+            .await
+            {
                 log::info!("[+] the assigned endpoint {assigned} works; skipping the scan");
                 quick_peer = Some(assigned);
             } else {
@@ -1564,7 +1580,14 @@ async fn run_masque(
             if !ring.is_empty() && want_quick_reconnect(&cached).await {
                 for peer in ring {
                     log::info!("[*] verifying cached gateway {peer} before reuse");
-                    if quick_verify_masque_peer(&identity, peer, tls::session_ech()).await {
+                    if quick_verify_masque_peer(
+                        &identity,
+                        peer,
+                        tls::session_ech(),
+                        masque_pins(),
+                    )
+                    .await
+                    {
                         log::info!("[+] cached gateway {peer} still works; skipping scan");
                         quick_peer = Some(peer);
                         break;
@@ -1607,7 +1630,14 @@ async fn run_masque(
             let retried = match last_good_peer {
                 Some(p) => {
                     log::info!("[*] retrying last known-good gateway {p} before rescanning");
-                    if quick_verify_masque_peer(&identity, p, tls::session_ech()).await {
+                    if quick_verify_masque_peer(
+                        &identity,
+                        p,
+                        tls::session_ech(),
+                        masque_pins(),
+                    )
+                    .await
+                    {
                         Some(p)
                     } else {
                         log::warn!(
@@ -1771,6 +1801,7 @@ async fn establish_masque(
     version_bait: bool,
     startup: std::time::Duration,
     label: &str,
+    expected_pins: Vec<Vec<u8>>,
 ) -> Result<MasqueHop> {
     let sni = quic::masque_sni()?;
     let (chans, internals) = quic::channels();
@@ -1812,7 +1843,7 @@ async fn establish_masque(
             local_ipv4: parse_local_v4(&identity.ipv4),
             quiet: false,
             pin_endpoint: true,
-            expected_pins: consts::MASQUE_PINS.iter().map(|p| p.to_vec()).collect(),
+            expected_pins: expected_pins.clone(),
             ech_config_list: ech,
         };
         log::info!("[+] [{label}] MASQUE transport: HTTP/2 (TCP) to {peer} (inner mtu {mtu})");
@@ -1830,6 +1861,7 @@ async fn establish_masque(
             path: quic::default_path().to_string(),
             cert_pem: identity.cert_pem.clone(),
             key_pem: identity.key_pem.clone(),
+            expected_pins,
             ech_config_list: ech,
             noize: noize_config(),
             local_ipv4: parse_local_v4(&identity.ipv4),
@@ -1893,6 +1925,7 @@ async fn run_masque_tunnel(
         true,
         masque_startup_timeout(),
         "masque",
+        masque_pins(),
     )
     .await?;
 
@@ -2137,6 +2170,7 @@ async fn run_masque_in_masque(
         true,
         masque_startup_timeout(),
         "outer",
+        masque_pins(),
     )
     .await?;
 
@@ -2175,6 +2209,7 @@ async fn run_masque_in_masque(
             false,
             mim_inner_startup(),
             "inner",
+            masque_pins(),
         )
         .await
         {
@@ -3126,6 +3161,7 @@ async fn run_gool_tunnel(
         true,
         masque_startup_timeout(),
         "outer",
+        masque_pins(),
     )
     .await?;
 
@@ -4361,7 +4397,7 @@ mod tests {
             .expect("a port");
         let address = socket.local_addr().expect("its address");
         let reached = tokio::spawn(async move {
-            let pair = account::generate_masque_keypair().expect("a key and a certificate");
+            let pair = https::local_test_server_identity();
             let mut tls =
                 boring::ssl::SslContextBuilder::new(boring::ssl::SslMethod::tls()).expect("tls");
             tls.set_certificate(
@@ -4441,6 +4477,7 @@ mod tests {
         let _options = tls::hold_options().await;
         let identity = account::handshake_identity();
         let startup = std::time::Duration::from_secs(10);
+        let test_pins = vec![crate::https::local_test_server_pin().to_vec()];
 
         // Without --masque-sni, www.cloudflare.com; with it, the name it gives.
         for (option, sni) in [
@@ -4470,11 +4507,26 @@ mod tests {
                             let mtu = if h2 { H2_TUNNEL_MTU } else { TUNNEL_MTU };
                             let datagram = quic::MAX_DATAGRAM_SIZE;
                             let hop = establish_masque(
-                                &identity, address, None, h2, mtu, datagram, false, startup, "test",
+                                &identity,
+                                address,
+                                None,
+                                h2,
+                                mtu,
+                                datagram,
+                                false,
+                                startup,
+                                "test",
+                                test_pins.clone(),
                             );
                             let _ = hop.await;
                         } else {
-                            quick_verify_masque_peer(&identity, address, None).await;
+                            quick_verify_masque_peer(
+                                &identity,
+                                address,
+                                None,
+                                test_pins.clone(),
+                            )
+                            .await;
                         }
                     };
                     let (name, authority) = tokio::select! {
@@ -4579,11 +4631,20 @@ mod tests {
             let datagram = quic::MAX_DATAGRAM_SIZE;
             let startup = std::time::Duration::from_secs(10);
             let hop = establish_masque(
-                identity, address, None, h2, mtu, datagram, false, startup, "test",
+                identity,
+                address,
+                None,
+                h2,
+                mtu,
+                datagram,
+                false,
+                startup,
+                "test",
+                masque_pins(),
             );
             let _ = hop.await;
         } else {
-            quick_verify_masque_peer(identity, address, None).await;
+            quick_verify_masque_peer(identity, address, None, masque_pins()).await;
         }
     }
 

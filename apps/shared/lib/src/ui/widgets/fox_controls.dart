@@ -80,7 +80,7 @@ class _FoxControlsState extends State<FoxControls> {
     if (mounted) await refresh();
   }
 
-  Future<void> activate(Map<String, dynamic> account) async {
+  Future<void> activateAccount(Map<String, dynamic> account) async {
     final id = account['id'];
     if (id is! String || id.isEmpty) return;
     setState(() { loading = true; error = null; });
@@ -94,7 +94,7 @@ class _FoxControlsState extends State<FoxControls> {
 
   Future<void> manage(Map<String, dynamic> account, String action) async {
     if (action == 'remove') return remove(account);
-    if (action == 'activate') return activate(account);
+    if (action == 'activate') return activateAccount(account);
     final id = account['id'];
     if (id is! String || id.isEmpty) return;
     setState(() { loading = true; error = null; });

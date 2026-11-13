@@ -60,6 +60,8 @@ pub struct TunnelConfig {
     pub path: String,
     pub cert_pem: Vec<u8>,
     pub key_pem: Vec<u8>,
+    /// SHA-256 SPKI hashes accepted for the gateway certificate.
+    pub expected_pins: Vec<Vec<u8>>,
     pub ech_config_list: Option<Vec<u8>>,
     pub noize: NoizeConfig,
     pub local_ipv4: Ipv4Addr,
@@ -327,11 +329,16 @@ pub async fn run(
     let mut readers = ReaderGuard::default();
     readers.push(spawn_reader(init_sock, local, net_tx.clone()));
 
+    let expected_pins: Vec<&[u8]> = cfg
+        .expected_pins
+        .iter()
+        .map(Vec::as_slice)
+        .collect();
     let mut config = tls::build_config(&TlsParams {
         cert_pem: &cfg.cert_pem,
         key_pem: &cfg.key_pem,
         pin_endpoint: true,
-        expected_pins: consts::MASQUE_PINS,
+        expected_pins: &expected_pins,
     })?;
 
     let datagram = cfg.datagram_budget();
@@ -845,6 +852,8 @@ pub struct VerifyParams {
     pub path: String,
     pub cert_pem: Vec<u8>,
     pub key_pem: Vec<u8>,
+    /// SHA-256 SPKI hashes accepted for the gateway certificate.
+    pub expected_pins: Vec<Vec<u8>>,
     pub ech_config_list: Option<Vec<u8>>,
     pub noize: NoizeConfig,
     pub timeout: Duration,
@@ -863,11 +872,16 @@ pub async fn verify_masque(p: &VerifyParams) -> Result<Duration> {
     sock.connect(crate::upstream::relay_target(local, p.peer))
         .await?;
 
+    let expected_pins: Vec<&[u8]> = p
+        .expected_pins
+        .iter()
+        .map(Vec::as_slice)
+        .collect();
     let mut config = tls::build_config(&TlsParams {
         cert_pem: &p.cert_pem,
         key_pem: &p.key_pem,
         pin_endpoint: true,
-        expected_pins: consts::MASQUE_PINS,
+        expected_pins: &expected_pins,
     })?;
 
     // A key that cannot be set fails the check: left aside, the name would go in the clear.

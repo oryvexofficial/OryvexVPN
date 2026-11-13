@@ -607,13 +607,12 @@ pub(crate) async fn test_server(
     tokio::net::TcpListener,
     std::sync::Arc<boring::ssl::SslAcceptor>,
 ) {
-    let pair = crate::account::generate_masque_keypair().expect("a key and a certificate");
+    let pair = local_test_server_identity();
+    let cert = boring::x509::X509::from_pem(&pair.cert_pem).expect("a certificate");
     let mut builder =
         boring::ssl::SslAcceptor::mozilla_intermediate_v5(boring::ssl::SslMethod::tls())
             .expect("tls");
-    builder
-        .set_certificate(&boring::x509::X509::from_pem(&pair.cert_pem).expect("a certificate"))
-        .expect("the certificate");
+    builder.set_certificate(&cert).expect("the certificate");
     builder
         .set_private_key(&boring::pkey::PKey::private_key_from_pem(&pair.key_pem).expect("a key"))
         .expect("the key");
@@ -625,6 +624,119 @@ pub(crate) async fn test_server(
         .expect("a port");
     let address = listener.local_addr().expect("its address");
     (address, listener, std::sync::Arc::new(builder.build()))
+}
+
+/// A process-local test server identity with a verifiable name and a trust anchor registered
+/// only in test builds. Its key is generated in memory, never stored in the source tree.
+#[cfg(test)]
+pub(crate) fn local_test_server_identity() -> &'static crate::account::MasqueKeyPair {
+    static PAIR: std::sync::OnceLock<crate::account::MasqueKeyPair> =
+        std::sync::OnceLock::new();
+    PAIR.get_or_init(|| {
+        use boring::asn1::Asn1Time;
+        use boring::bn::BigNum;
+        use boring::ec::{EcGroup, EcKey};
+        use boring::hash::MessageDigest;
+        use boring::nid::Nid;
+        use boring::pkey::PKey;
+        use boring::x509::extension::{
+            BasicConstraints, ExtendedKeyUsage, KeyUsage, SubjectAlternativeName,
+        };
+        use boring::x509::{X509Builder, X509NameBuilder};
+
+        let group = EcGroup::from_curve_name(Nid::X9_62_PRIME256V1).expect("P-256");
+        let key = PKey::from_ec_key(EcKey::generate(&group).expect("a test key"))
+            .expect("a test key");
+        let mut builder = X509Builder::new().expect("a test certificate");
+        builder.set_version(2).expect("X.509 v3");
+        let serial = BigNum::from_u32(1)
+            .and_then(|number| number.to_asn1_integer())
+            .expect("a serial");
+        builder.set_serial_number(&serial).expect("the serial");
+
+        let mut name = X509NameBuilder::new().expect("a subject");
+        name.append_entry_by_nid(Nid::ORGANIZATIONNAME, "OryvexVPN tests")
+            .expect("the organization");
+        name.append_entry_by_nid(Nid::COMMONNAME, "local test TLS server")
+            .expect("the common name");
+        let name = name.build();
+        builder.set_subject_name(&name).expect("the subject");
+        builder.set_issuer_name(&name).expect("the issuer");
+        builder
+            .set_not_before(&Asn1Time::days_from_now(0).expect("not-before"))
+            .expect("not-before");
+        builder
+            .set_not_after(&Asn1Time::days_from_now(30).expect("not-after"))
+            .expect("not-after");
+        builder.set_pubkey(&key).expect("the public key");
+
+        let ca = BasicConstraints::new()
+            .critical()
+            .ca()
+            .build()
+            .expect("CA constraint");
+        builder.append_extension(&ca).expect("CA constraint");
+        let usage = KeyUsage::new()
+            .critical()
+            .digital_signature()
+            .key_cert_sign()
+            .crl_sign()
+            .build()
+            .expect("key usage");
+        builder.append_extension(&usage).expect("key usage");
+        let server_auth = ExtendedKeyUsage::new()
+            .server_auth()
+            .build()
+            .expect("server usage");
+        builder
+            .append_extension(&server_auth)
+            .expect("server usage");
+        let san = {
+            let context = builder.x509v3_context(None, None);
+            let mut names = SubjectAlternativeName::new();
+            for host in [
+                "api.cloudflareclient.com",
+                "api.devices.cloudflareclient.com",
+                "api.example.com",
+                "front.example.com",
+                "doh.example.test",
+                "front.example.test",
+                "www.cloudflare.com",
+                "consumer-masque.cloudflareclient.com",
+                "cloudflareaccess.com",
+            ] {
+                names.dns(host);
+            }
+            names.ip("127.0.0.1");
+            names.build(&context).expect("server names")
+        };
+        builder.append_extension(&san).expect("server names");
+        builder.sign(&key, MessageDigest::sha256()).expect("signature");
+
+        let cert = builder.build();
+        crate::mitm::register_test_trust_anchor(&cert);
+        let key_pem = key.private_key_to_pem_pkcs8().expect("private key");
+        let spki_der = key.public_key_to_der().expect("public key");
+        let cert_pem = cert.to_pem().expect("certificate PEM");
+        crate::account::MasqueKeyPair {
+            key_pem,
+            cert_pem,
+            spki_der,
+        }
+    })
+}
+
+/// SHA-256 SPKI pin for the in-memory local fixture, used only by test handshakes.
+#[cfg(test)]
+pub(crate) fn local_test_server_pin() -> &'static [u8] {
+    static PIN: std::sync::OnceLock<[u8; 32]> = std::sync::OnceLock::new();
+    PIN.get_or_init(|| {
+        let pair = local_test_server_identity();
+        let digest = ring::digest::digest(&ring::digest::SHA256, &pair.spki_der);
+        let mut pin = [0u8; 32];
+        pin.copy_from_slice(digest.as_ref());
+        pin
+    })
 }
 
 #[cfg(test)]
