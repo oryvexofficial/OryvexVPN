@@ -695,14 +695,14 @@ pub(crate) fn local_test_server_identity() -> &'static crate::account::MasqueKey
             let context = builder.x509v3_context(None, None);
             let mut names = SubjectAlternativeName::new();
             for host in [
-                "api.cloudflareclient.com",
-                "api.devices.cloudflareclient.com",
+                crate::consts::API_HOST,
+                crate::consts::API_FALLBACK_HOST,
                 "api.example.com",
                 "front.example.com",
                 "doh.example.test",
                 "front.example.test",
-                "www.cloudflare.com",
-                "consumer-masque.cloudflareclient.com",
+                crate::consts::DEFAULT_MASQUE_SNI,
+                crate::consts::CONNECT_SNI,
                 "cloudflareaccess.com",
             ] {
                 names.dns(host);
@@ -742,6 +742,27 @@ pub(crate) fn local_test_server_pin() -> &'static [u8] {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn local_fixture_names_cover_api_doh_and_masque_but_not_other_hosts() {
+        let pair = local_test_server_identity();
+        let cert = boring::x509::X509::from_pem(&pair.cert_pem).expect("fixture certificate");
+        let names = cert.subject_alt_names().expect("fixture names");
+        for host in [
+            crate::consts::API_HOST,
+            crate::consts::API_FALLBACK_HOST,
+            "api.example.com",
+            "front.example.com",
+            "doh.example.test",
+            "front.example.test",
+            crate::consts::DEFAULT_MASQUE_SNI,
+            crate::consts::CONNECT_SNI,
+        ] {
+            assert!(names.iter().any(|name| name.dnsname() == Some(host)), "{host}");
+        }
+        assert!(names.iter().any(|name| name.ipaddress() == Some(&[127, 0, 0, 1][..])));
+        assert!(!names.iter().any(|name| name.dnsname() == Some("unrelated.example")));
+    }
 
     fn headers() -> Vec<(String, String)> {
         vec![

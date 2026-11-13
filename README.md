@@ -10,7 +10,20 @@ supported by Mozilla. A Firefox Account with service access is required.
 
 ## App preview
 
-[Watch the full app preview](site/video/oryvexvpn-preview.mp4) · [Interactive preview source](site/preview/index.html)
+<video controls playsinline preload="metadata" width="800" poster="site/video/oryvexvpn-preview-poster.png">
+  <source src="site/video/oryvexvpn-preview.mp4" type="video/mp4">
+  Your Markdown viewer does not support embedded video.
+</video>
+
+[![Play the OryvexVPN walkthrough](site/video/oryvexvpn-preview-readme.jpg)](https://oryvexofficial.github.io/OryvexVPN/#app-preview)
+
+[Watch on the website](https://oryvexofficial.github.io/OryvexVPN/#app-preview) · [Open the video file](site/video/oryvexvpn-preview.mp4) · [Interactive preview source](site/preview/index.html)
+
+Some Markdown viewers, including GitHub, do not play a repository-relative
+`<video>` inline. The image above opens the website's player after GitHub Pages
+is published. For GitHub's inline README player, upload
+`site/video/oryvexvpn-preview.mp4` in the GitHub editor and place the resulting
+video attachment URL on its own line here.
 
 The preview is a visual simulation based on the app source, not a working VPN.
 It does not connect, sign in, deploy a relay, or show live traffic or locations.

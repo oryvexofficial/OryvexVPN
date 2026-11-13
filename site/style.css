@@ -88,3 +88,24 @@ h1{font-size:clamp(46px,7.4vw,98px);font-weight:800}h2{font-size:clamp(34px,4.6v
 @media(max-width:380px){.brand span{font-size:18px}}
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}.ring{stroke-dashoffset:0}.js .reveal{opacity:1;transform:none}}
 @media(prefers-color-scheme:dark){:root{--paper:#080e1d;--card:#101a33;--ink:#eef3ff;--ink-2:#c3cfea;--muted:#9fb0d2;--line:#243257;--cobalt:#5b97ff;--cobalt-d:#3f7ff0}.header{background:color-mix(in srgb,#080e1d 88%,transparent)}.cta{background:#eef3ff;color:#0a1226}.cta:hover{background:var(--cobalt);color:#fff}.desktop-nav a:hover,.desktop-nav a[aria-current],.toc a:hover{background:#18264a}.note{background:#13214a}.choice.on{background:#14275a}.btn.primary{color:#06122e}.btn.ghost:hover{color:#06122e}.orbit-stage::before{background:radial-gradient(circle,#16295a,transparent 68%)}.ring-guide{stroke:#2a3a66}.escape{fill:#eef3ff}.travel{stroke:#eef3ff}.mobile-nav nav a:hover{background:#18264a}.band,.relay,.answer,.dl.hot,.footer{background:#050a16}.dialog{background:#0c1530}.tags li{background:#0c1530}.dl.hot{border-color:#243257}.closing{background:#0f3f9c}.closing .btn.primary{color:#0a1226}.prose a,.link{color:#8db6ff}}
+
+/* App walkthrough: a small cinema in the same cobalt and ink as the product. */
+.video-player{max-width:980px;overflow:hidden;border-radius:20px;background:#0a1226;color:#eaf0ff;box-shadow:0 24px 56px #0a122629}
+.video-screen{position:relative;background:#06080c;aspect-ratio:8/5;display:grid;place-items:center}
+.video-screen video{display:block;width:100%;height:100%;object-fit:contain}
+.video-player.has-custom-video video::-webkit-media-controls{display:none!important}
+.video-center-play{position:absolute;inset:50% auto auto 50%;transform:translate(-50%,-50%);width:72px;height:72px;border:2px solid #ffffffdb;border-radius:50%;background:#0f5bef;color:#fff;font-size:25px;line-height:1;cursor:pointer;box-shadow:0 0 0 10px #0a122680,0 14px 32px #0008;transition:transform .2s,background .2s}
+.video-center-play span{display:inline-block;margin-left:4px}.video-center-play:hover{transform:translate(-50%,-50%) scale(1.06);background:#0a43b8}
+.video-controls{display:flex;align-items:center;gap:14px;padding:15px 20px;min-height:68px}
+.video-controls button{border:0;cursor:pointer;font:600 14px var(--body)}
+.video-play{display:flex;gap:9px;align-items:center;justify-content:center;min-width:86px;min-height:40px;padding:7px 14px;border-radius:10px;background:#0f5bef;color:#fff}
+.video-play:hover{background:#0a43b8}.video-time{color:#c8d6f4;font:500 13px var(--mono);font-variant-numeric:tabular-nums}
+.video-scrub{display:flex;align-items:center;flex:1;min-width:50px}.video-scrub input{width:100%;height:24px;margin:0;cursor:pointer;accent-color:#ffd23f}
+.video-fullscreen{min-width:42px;min-height:40px;border-radius:10px;background:#1c2a4b;color:#eaf0ff;font-size:25px!important}.video-fullscreen:hover{background:#2c406c}
+.video-player :focus-visible{outline-color:#ffd23f}.video-player [hidden]{display:none!important}
+.video-player:fullscreen{width:100%;max-width:none;height:100%;border-radius:0;display:flex;flex-direction:column;justify-content:center}
+.video-player:fullscreen .video-screen{width:100%;min-height:0;aspect-ratio:auto;flex:1}
+.video-error{margin:0;padding:0 20px 18px;color:#eaf0ff}.video-error a{color:#fff;text-decoration:underline}
+.preview-links{max-width:980px;display:flex;align-items:center;flex-wrap:wrap;gap:8px 18px;padding-top:16px}.preview-links p{margin:0 auto 0 0;color:var(--muted);font-size:14px}.preview-links .link{margin:0;font-size:15px}
+.visually-hidden{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+@media(max-width:540px){.video-controls{gap:8px;padding:10px}.video-play{min-width:42px;padding:7px 10px}.video-play [data-player-label]{display:none}.video-time{font-size:12px}.video-center-play{width:58px;height:58px;font-size:20px}.preview-links{align-items:flex-start;flex-direction:column}}

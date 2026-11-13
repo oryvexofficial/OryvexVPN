@@ -72,5 +72,18 @@ class SiteAssets(unittest.TestCase):
         self.assertIn('branding/oryvexcore-256.png', (ROOT / 'README.md').read_text())
         self.assertTrue((ROOT / 'branding/oryvexcore-256.png').is_file())
 
+    def test_walkthrough_and_readme_fallback_are_bundled(self):
+        readme = (ROOT / 'README.md').read_text(encoding='utf-8')
+        home = (SITE / 'index.html').read_text(encoding='utf-8')
+        for asset in ('oryvexvpn-preview.mp4', 'oryvexvpn-preview-poster.png',
+                      'oryvexvpn-preview-readme.jpg'):
+            self.assertTrue((SITE / 'video' / asset).is_file(), asset)
+            self.assertIn('site/video/' + asset, readme)
+        self.assertIn('<video controls', readme)
+        self.assertIn('GitHub', readme)
+        self.assertIn('data-video-player', home)
+        self.assertIn('data-player-controls hidden', home)
+        self.assertIn('video-player.js', home)
+
 if __name__ == '__main__':
     unittest.main()

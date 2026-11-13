@@ -37,7 +37,7 @@ use boring::ssl::{
     select_next_proto, AlpnError, NameType, SniError, SslAcceptor, SslConnector, SslMethod,
     SslRef, SslVerifyMode,
 };
-use boring::stack::Stack;
+use boring::stack::{Stack, StackRef};
 use boring::x509::extension::{BasicConstraints, ExtendedKeyUsage, KeyUsage, SubjectAlternativeName};
 use boring::x509::store::{X509Store, X509StoreBuilder};
 use boring::x509::{X509Name, X509StoreContext, X509};
@@ -442,7 +442,7 @@ fn test_roots() -> X509Store {
     builder.build()
 }
 
-fn chain_is_trusted(leaf: &X509, chain: &Stack<X509>) -> Result<bool> {
+fn chain_is_trusted(leaf: &X509, chain: &StackRef<X509>) -> Result<bool> {
     let mut ctx = X509StoreContext::new().map_err(tls_err)?;
     #[cfg(test)]
     {
@@ -1199,6 +1199,17 @@ mod tests {
         let mut ctx = X509StoreContext::new().expect("a context");
         let ok = ctx.init(&store, &leaf, &chain, |c| c.verify_cert()).expect("a verdict");
         assert!(ok);
+    }
+
+    #[test]
+    fn local_test_certificate_is_trusted_but_an_unrelated_one_is_not() {
+        let fixture = crate::https::local_test_server_identity();
+        let trusted = X509::from_pem(&fixture.cert_pem).expect("fixture certificate");
+        let stranger = crate::account::generate_masque_keypair().expect("unrelated certificate");
+        let untrusted = X509::from_pem(&stranger.cert_pem).expect("unrelated certificate");
+        let chain = Stack::<X509>::new().expect("empty certificate chain");
+        assert!(chain_is_trusted(&trusted, &chain).expect("trusted verdict"));
+        assert!(!chain_is_trusted(&untrusted, &chain).expect("untrusted verdict"));
     }
 }
 
