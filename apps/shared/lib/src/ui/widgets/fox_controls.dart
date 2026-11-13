@@ -8,6 +8,7 @@ import '../../core/backend.dart';
 import '../../core/cloudflare_relay.dart';
 import '../../core/platform_links.dart';
 import '../theme.dart';
+import 'section.dart';
 import 'tor_exit_picker.dart' show CountryFlag;
 import 'cloudflare_relay_setup.dart';
 import 'fox_web_signin.dart';
@@ -28,6 +29,8 @@ class _FoxControlsState extends State<FoxControls> {
   List<Map<String, dynamic>> accounts = [];
   List<Map<String, dynamic>> locations = [];
   String selected = '';
+  bool systemProxySupported = false;
+  bool systemProxyEnabled = false;
 
   List<Map<String, dynamic>> _list(Object? value) => value is List
       ? value.whereType<Map>().map((v) => Map<String, dynamic>.from(v)).toList()
@@ -50,6 +53,9 @@ class _FoxControlsState extends State<FoxControls> {
         accounts = loadedAccounts;
         selected = (state['selection'] as String? ?? '').toUpperCase();
         if (selected == 'FASTEST') selected = 'fastest';
+        systemProxySupported = !widget.backend.isAndroid &&
+            state['system_proxy_supported'] == true;
+        systemProxyEnabled = state['system_proxy'] == 'set';
         error = null;
       });
       // Do not make first-time sign-in wait on a server-list request.
@@ -70,6 +76,18 @@ class _FoxControlsState extends State<FoxControls> {
     setState(() { loading = true; error = null; });
     try {
       await widget.backend.foxRequest('POST', '/api/location', {'country': value});
+      await refresh();
+    } catch (e) {
+      if (mounted) setState(() { loading = false; error = e.toString(); });
+    }
+  }
+
+  Future<void> changeSystemProxy(bool enabled) async {
+    setState(() { loading = true; error = null; });
+    try {
+      await widget.backend.foxRequest('POST', '/api/system-proxy', {
+        'mode': enabled ? 'set' : 'clear',
+      });
       await refresh();
     } catch (e) {
       if (mounted) setState(() { loading = false; error = e.toString(); });
@@ -207,8 +225,18 @@ class _FoxControlsState extends State<FoxControls> {
         child: TextButton.icon(onPressed: loading ? null : pingLocations, icon: const Icon(Icons.speed), label: const Text('Test country latency')),
       ),
       if (!selectedExists) Padding(padding: const EdgeInsets.only(top: 6), child: Text('Selected country $selected is not in the current list.', style: Ox.body(13, color: Ox.secondary))),
+      if (systemProxySupported)
+        SwitchRow(
+          title: 'Set system proxy',
+          subtitle: systemProxyEnabled
+              ? 'Apps that follow your system proxy setting use Fox while connected; other apps can use SOCKS5 manually.'
+              : 'Point apps that follow your system proxy setting at Fox; other apps can use SOCKS5 manually.',
+          value: systemProxyEnabled,
+          enabled: !loading,
+          onChanged: (enabled) => unawaited(changeSystemProxy(enabled)),
+        ),
       const SizedBox(height: 8),
-      Text('Available countries come from Mozilla. Windows uses a local SOCKS5 proxy; Android can use whole-device VPN.', style: Ox.body(13, color: Ox.secondary)),
+      Text('Fox keeps its local SOCKS5 proxy available. Android can use whole-device VPN.', style: Ox.body(13, color: Ox.secondary)),
       const SizedBox(height: 18),
       _FoxRelaySection(backend: widget.backend),
     ]);

@@ -52,8 +52,10 @@ to open Mozilla's account page inside the app, then choose an available country
 and connect. Manage accounts and test country latency from the same card. The
 old local web panel is removed. **Other sign-in** is a direct account fallback.
 Web sign-in requires Android System WebView on Android or Microsoft Edge WebView2
-Runtime on Windows. A browser sign-in provider can restrict embedded WebViews. Android offers whole-device VPN mode. Windows Fox uses a local
-SOCKS5 proxy, so applications must be configured to use it.
+Runtime on Windows. A browser sign-in provider can restrict embedded WebViews.
+Windows Fox keeps its local SOCKS5 proxy available; use **Set system proxy** for
+apps that honor Windows proxy settings, or configure other apps to use SOCKS5.
+Android offers whole-device VPN mode.
 
 ## First push
 

@@ -1,5 +1,9 @@
 # OryvexVPN 1.0.0 (Created by Muvixo)
 
+## Unreleased: Fox system proxy
+
+- Fox's Connect controls now include an optional **Set system proxy** switch on supported desktops. It keeps manual SOCKS5 setup available and restores the previous system proxy setting when Fox is turned off.
+
 ## Unreleased: MITM route and About texts
 
 - New **MITM** connection (`oryvexcore --mitm`, `--protocol mitm`): domain fronting for Google/YouTube, Meta (Instagram, WhatsApp, Facebook) and Fastly sites (Reddit, CNN, BuzzFeed...), built into the core. No v2ray, no outside server, no engine process. Based on patterniha/MITM-DomainFronting (GPL-3.0).
