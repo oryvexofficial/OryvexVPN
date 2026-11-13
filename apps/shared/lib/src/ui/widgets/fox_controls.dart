@@ -521,7 +521,7 @@ class _FoxRelayManagerState extends State<_FoxRelayManager> {
                   ),
                   title: Text(relay.scriptName, maxLines: 1, overflow: TextOverflow.ellipsis),
                   subtitle: Text(
-                    active?.endpointKey == relay.endpointKey
+                    active != null && active.endpointKey == relay.endpointKey
                         ? (active.enabled ? 'Active' : 'Current, disabled')
                         : Uri.tryParse(relay.publicUrl)?.host ?? relay.publicUrl,
                     maxLines: 1,
