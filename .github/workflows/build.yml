@@ -344,7 +344,7 @@ jobs:
           fi
       - name: Publish release
         if: github.ref_type == 'tag' || steps.tag_check.outputs.should_release == 'true'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ needs.windows.outputs.tag_name }}
           target_commitish: ${{ github.sha }}
