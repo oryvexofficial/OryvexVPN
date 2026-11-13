@@ -306,7 +306,7 @@ jobs:
             exit 0
           fi
           echo "Tag $RELEASE_TAG already points to this commit; safe to retry the release."
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         if: github.ref_type == 'tag' || steps.tag_check.outputs.should_release == 'true'
         with:
           pattern: VexoStream-*-${{ needs.windows.outputs.label }}-${{ needs.windows.outputs.tag_name }}
