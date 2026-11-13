@@ -1,7 +1,7 @@
 name: oryvexcore
 description: "OryvexVPN for Android: the blue and black app around the OryvexCore core."
 publish_to: 'none'
-version: 1.1.15+268
+version: 1.1.19+269
 
 environment:
   sdk: '>=3.8.0 <4.0.0'
