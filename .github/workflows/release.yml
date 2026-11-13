@@ -1,0 +1,78 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  apps:
+    name: Build Windows and Android
+    uses: ./.github/workflows/apps.yml
+    secrets: inherit
+
+  release:
+    name: Publish release
+    needs: apps
+    if: ${{ startsWith(github.ref, 'refs/tags/') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download Android APKs
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: OryvexVPN-android-apks
+          path: dist
+
+      - name: Download Windows setup
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: OryvexVPN-Setup-x64.exe
+          path: dist
+
+      - name: Check release files and generate checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd dist
+          test -s OryvexVPN-android-universal.apk
+          test -s OryvexVPN-android-arm64-v8a.apk
+          test -s OryvexVPN-android-armeabi-v7a.apk
+          shopt -s nullglob
+          installers=(OryvexVPN-Setup-*-x64.exe)
+          if [ "${#installers[@]}" -ne 1 ] || [ ! -s "${installers[0]}" ]; then
+            echo "::error::Expected exactly one Windows x64 installer"; exit 1
+          fi
+          files=(OryvexVPN-android-universal.apk OryvexVPN-android-arm64-v8a.apk OryvexVPN-android-armeabi-v7a.apk "${installers[0]}")
+          sha256sum "${files[@]}" > SHA256SUMS.txt
+          for f in "${files[@]}"; do sha256sum "$f" > "$f.sha256"; done
+          cat SHA256SUMS.txt
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
+        with:
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: dist/*
+          body: |
+            ## Download OryvexVPN
+
+            - Windows 10 / 11: x64 setup installer.
+            - Android 7.0+: universal APK (ARM64 + ARMv7), ARM64 for newer
+              phones, or ARMv7 for older 32-bit ARM phones.
+
+            Fox is an unofficial Firefox Account VPN client and is not made,
+            endorsed or supported by Mozilla. Service availability and account
+            eligibility are controlled by Mozilla.
+
+            SHA256SUMS.txt contains checksums for all downloads.

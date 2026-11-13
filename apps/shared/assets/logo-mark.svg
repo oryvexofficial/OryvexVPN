@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <title>OryvexVPN (small sizes)</title>
+  <!-- OryvexVPN: the open orbit. Same geometry as the in-app Connect orb: gap centred at
+       the upper right (-45deg), the core parked just outside the ring, on its way out. -->
+  <defs>
+    <linearGradient id="oxTile" x1="0" y1="0" x2="0" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2B83FF"/>
+      <stop offset="1" stop-color="#0656E6"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="114" fill="url(#oxTile)"/>
+  
+  <path d="M361.93,263.82 A118,118 0 1,1 248.18,150.07" fill="none" stroke="#FFFFFF" stroke-width="78" stroke-linecap="round"/><circle cx="368.45" cy="143.55" r="46" fill="#FFFFFF"/>
+</svg>

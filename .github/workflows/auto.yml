@@ -1,0 +1,27 @@
+name: auto
+
+on:
+  push:
+    branches:
+      - main
+      - master
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  dispatch-workflows:
+    name: Start CI and Pages after each push
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch the push workflows
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          REF: ${{ github.ref_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh workflow run ci.yml --repo "$REPOSITORY" --ref "$REF"
+          gh workflow run pages.yml --repo "$REPOSITORY" --ref "$REF"

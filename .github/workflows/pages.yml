@@ -1,0 +1,39 @@
+name: pages
+# Publishes site/ to GitHub Pages. Settings > Pages > Source: GitHub Actions.
+on:
+  push:
+    branches: [main, master]
+    paths: ["site/**", ".github/workflows/pages.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: false
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Check site links and bundled assets
+        run: python3 -m unittest discover -s tools/tests -p 'test_*.py'
+      - name: Check Cloudflare relay Worker
+        run: node tools/tests/test_cloudflare_worker.mjs
+      - name: Check video player controls
+        run: node tools/tests/test_video_player.js
+      - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
+      - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
+        with:
+          path: site
+      - id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4
+        with:
+          # Pages can remain in updating_pages well past the action's 10-minute default.
+          timeout: 1200000
