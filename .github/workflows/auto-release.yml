@@ -16,7 +16,6 @@ name: auto-release
 on:
   push:
     branches: [main]
-    paths-ignore: ["**.md", "docs/**", "site/**", "branding/**"]
   workflow_dispatch:
 
 permissions:
@@ -31,7 +30,9 @@ jobs:
   tag-and-release:
     name: Tag and release
     runs-on: ubuntu-latest
-    if: ${{ !contains(github.event.head_commit.message, '[skip release]') }}
+    # head_commit is present for push events only. Manual runs must not be
+    # skipped because that field is empty.
+    if: ${{ github.event_name != 'push' || !contains(github.event.head_commit.message || '', '[skip release]') }}
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -88,7 +89,8 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -am "Release v$ver [skip release]"
-          git pull --rebase origin main || true
+          git fetch origin main
+          git rebase origin/main
           git push origin HEAD:main
 
       - name: Create and push the tag

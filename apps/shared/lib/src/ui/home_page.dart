@@ -843,6 +843,15 @@ class _RouteAndMode extends StatelessWidget {
               value: s.vpnMode,
               onChanged: (v) => c.updateSettings((x) => x.vpnMode = v),
             ),
+          if (!s.foxOnly)
+            SwitchRow(
+              title: 'Local HTTP proxy',
+              subtitle: s.httpProxy
+                  ? 'HTTP proxy is available at the address below.'
+                  : 'Enable an HTTP proxy alongside the always-available SOCKS5 proxy.',
+              value: s.httpProxy,
+              onChanged: (v) => c.updateSettings((x) => x.httpProxy = v),
+            ),
           if (c.backend.supportsSystemProxy && !s.foxOnly)
             SwitchRow(
               title: 'Windows system proxy',

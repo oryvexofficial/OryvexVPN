@@ -26,6 +26,12 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Checkout tagged source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.ref }}
+          persist-credentials: false
+
       - name: Download Android APKs
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
@@ -38,6 +44,13 @@ jobs:
           name: OryvexVPN-Setup-x64.exe
           path: dist
 
+      - name: Package source archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          git archive --format=zip --prefix=OryvexVPN/ -o dist/OryvexVPN-source.zip HEAD
+
       - name: Check release files and generate checksums
         shell: bash
         run: |
@@ -46,12 +59,13 @@ jobs:
           test -s OryvexVPN-android-universal.apk
           test -s OryvexVPN-android-arm64-v8a.apk
           test -s OryvexVPN-android-armeabi-v7a.apk
+          test -s OryvexVPN-source.zip
           shopt -s nullglob
           installers=(OryvexVPN-Setup-*-x64.exe)
           if [ "${#installers[@]}" -ne 1 ] || [ ! -s "${installers[0]}" ]; then
             echo "::error::Expected exactly one Windows x64 installer"; exit 1
           fi
-          files=(OryvexVPN-android-universal.apk OryvexVPN-android-arm64-v8a.apk OryvexVPN-android-armeabi-v7a.apk "${installers[0]}")
+          files=(OryvexVPN-android-universal.apk OryvexVPN-android-arm64-v8a.apk OryvexVPN-android-armeabi-v7a.apk "${installers[0]}" OryvexVPN-source.zip)
           sha256sum "${files[@]}" > SHA256SUMS.txt
           for f in "${files[@]}"; do sha256sum "$f" > "$f.sha256"; done
           cat SHA256SUMS.txt
@@ -70,6 +84,7 @@ jobs:
             - Windows 10 / 11: x64 setup installer.
             - Android 7.0+: universal APK (ARM64 + ARMv7), ARM64 for newer
               phones, or ARMv7 for older 32-bit ARM phones.
+            - Source: OryvexVPN-source.zip.
 
             Fox is an unofficial Firefox Account VPN client and is not made,
             endorsed or supported by Mozilla. Service availability and account

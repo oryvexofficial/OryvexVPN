@@ -4,6 +4,7 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'backend.dart';
 
@@ -17,6 +18,108 @@ class CloudflareRelayDeployment {
   const CloudflareRelayDeployment({required this.scriptName, required this.publicUrl});
   final String scriptName;
   final String publicUrl;
+}
+
+/// A relay created on this device. Only the public Worker address and name are
+/// kept here; API tokens and the private relay secret are never stored.
+class CloudflareRelayRecord {
+  const CloudflareRelayRecord({
+    required this.scriptName,
+    required this.publicUrl,
+    required this.addedAt,
+  });
+
+  final String scriptName;
+  final String publicUrl;
+  final DateTime addedAt;
+
+  String get endpointKey {
+    final uri = Uri.tryParse(publicUrl);
+    if (uri == null) return publicUrl;
+    return '${uri.host}:${uri.hasPort ? uri.port : 443}${uri.path}';
+  }
+
+  Map<String, dynamic> toJson() => {
+        'scriptName': scriptName,
+        'publicUrl': publicUrl,
+        'addedAt': addedAt.toUtc().toIso8601String(),
+      };
+}
+
+/// Device-local index of deployed relays. It intentionally omits the private
+/// `?secret=` address and never retains a Cloudflare API token.
+class CloudflareRelayStore {
+  static const _key = 'oryvex.fox-relays.v1';
+  static const _maxRecords = 25;
+
+  static Future<List<CloudflareRelayRecord>> load() async {
+    final prefs = await SharedPreferences.getInstance();
+    final encoded = prefs.getString(_key);
+    if (encoded == null || encoded.isEmpty) return const [];
+    try {
+      final decoded = jsonDecode(encoded);
+      if (decoded is! List) return const [];
+      final records = <CloudflareRelayRecord>[];
+      for (final item in decoded.whereType<Map>()) {
+        final name = item['scriptName'];
+        final rawUrl = item['publicUrl'];
+        final date = item['addedAt'];
+        if (name is! String || name.trim().isEmpty || rawUrl is! String) continue;
+        final uri = Uri.tryParse(rawUrl.trim());
+        if (uri == null || uri.scheme != 'https' || uri.host.isEmpty) continue;
+        final publicUrl = Uri(
+          scheme: 'https',
+          host: uri.host,
+          port: uri.hasPort ? uri.port : null,
+          path: uri.path.isEmpty ? '/' : uri.path,
+        ).toString();
+        records.add(CloudflareRelayRecord(
+          scriptName: name.trim(),
+          publicUrl: publicUrl,
+          addedAt: DateTime.tryParse(date is String ? date : '')?.toUtc() ??
+              DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
+        ));
+      }
+      records.sort((a, b) => b.addedAt.compareTo(a.addedAt));
+      return records.take(_maxRecords).toList();
+    } on FormatException {
+      return const [];
+    }
+  }
+
+  static Future<void> remember(CloudflareRelayDeployment deployment) async {
+    final name = deployment.scriptName.trim();
+    final uri = Uri.tryParse(deployment.publicUrl.trim());
+    if (name.isEmpty || uri == null || uri.scheme != 'https' || uri.host.isEmpty) return;
+    final publicUrl = Uri(
+      scheme: 'https',
+      host: uri.host,
+      port: uri.hasPort ? uri.port : null,
+      path: uri.path.isEmpty ? '/' : uri.path,
+    ).toString();
+    final records = await load();
+    final key = '${uri.host}:${uri.hasPort ? uri.port : 443}${uri.path.isEmpty ? '/' : uri.path}';
+    records.removeWhere((record) => record.scriptName == name && record.endpointKey == key);
+    records.insert(0, CloudflareRelayRecord(scriptName: name, publicUrl: publicUrl, addedAt: DateTime.now().toUtc()));
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_key, jsonEncode(records.take(_maxRecords).map((record) => record.toJson()).toList()));
+  }
+
+  static Future<void> forget(String scriptName) async {
+    final records = await load();
+    records.removeWhere((record) => record.scriptName == scriptName);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_key, jsonEncode(records.map((record) => record.toJson()).toList()));
+  }
+}
+
+/// Safe-to-display details for the relay currently configured in Fox.
+/// The private URL, including its query-string secret, is never exposed here.
+class FoxRelayInfo {
+  const FoxRelayInfo({required this.displayAddress, required this.endpointKey, required this.enabled});
+  final String displayAddress;
+  final String endpointKey;
+  final bool enabled;
 }
 
 class CloudflareRelayException implements Exception {
@@ -148,6 +251,50 @@ class CloudflareRelayClient {
   }
 
   Future<void> configureFoxRelay(CoreBackend backend, String relayUrl) async {
+    await _updateFoxNetwork(backend, (network) {
+      network['api_relay'] = relayUrl;
+      network['api_relay_enabled'] = true;
+    });
+  }
+
+  static Future<FoxRelayInfo?> readFoxRelay(CoreBackend backend) async {
+    final view = await backend.foxRequest('GET', '/api/settings');
+    final config = view['config'];
+    final network = config is Map ? config['network'] : null;
+    if (network is! Map) return null;
+    final rawUrl = network['api_relay'];
+    if (rawUrl is! String || rawUrl.trim().isEmpty) return null;
+    final uri = Uri.tryParse(rawUrl.trim());
+    if (uri == null || uri.scheme != 'https' || uri.host.isEmpty) return null;
+    final path = uri.path.isEmpty ? '/' : uri.path;
+    final port = uri.hasPort ? uri.port : null;
+    return FoxRelayInfo(
+      displayAddress: Uri(scheme: 'https', host: uri.host, port: port, path: path).toString(),
+      endpointKey: '${uri.host}:${uri.hasPort ? uri.port : 443}$path',
+      enabled: network['api_relay_enabled'] == true,
+    );
+  }
+
+  static Future<void> setFoxRelayEnabled(CoreBackend backend, bool enabled) async {
+    await _updateFoxNetwork(backend, (network) {
+      if (network['api_relay'] is! String || (network['api_relay'] as String).trim().isEmpty) {
+        throw const CloudflareRelayException('Add a relay before enabling it.');
+      }
+      network['api_relay_enabled'] = enabled;
+    });
+  }
+
+  static Future<void> clearFoxRelay(CoreBackend backend) async {
+    await _updateFoxNetwork(backend, (network) {
+      network['api_relay'] = '';
+      network['api_relay_enabled'] = false;
+    });
+  }
+
+  static Future<void> _updateFoxNetwork(
+    CoreBackend backend,
+    void Function(Map<String, dynamic> network) update,
+  ) async {
     final view = await backend.foxRequest('GET', '/api/settings');
     final rawConfig = view['config'];
     if (rawConfig is! Map) throw const CloudflareRelayException('Fox returned an unexpected settings response.');
@@ -155,11 +302,10 @@ class CloudflareRelayClient {
     final rawNetwork = config['network'];
     if (rawNetwork is! Map) throw const CloudflareRelayException('Fox settings did not include network settings.');
     final network = Map<String, dynamic>.from(rawNetwork);
-    network['api_relay'] = relayUrl;
-    network['api_relay_enabled'] = true;
+    update(network);
     config['network'] = network;
     final saved = await backend.foxRequest('PUT', '/api/settings', {'config': config});
-    if (saved['saved'] != true) throw const CloudflareRelayException('Fox did not confirm that the relay was saved.');
+    if (saved['saved'] != true) throw const CloudflareRelayException('Fox did not confirm that the relay setting was saved.');
   }
 
   Future<Map<String, dynamic>> _request(

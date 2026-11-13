@@ -78,6 +78,11 @@ class _CloudflareRelayDialogState extends State<_CloudflareRelayDialog> {
     setState(() { _busy = true; _error = null; _deployment = null; _unlinked = null; _health = null; });
     try {
       final deployment = await _client.deployAndConfigureFox(token: token, account: account, backend: widget.backend);
+      try {
+        await CloudflareRelayStore.remember(deployment);
+      } catch (_) {
+        // Relay deployment has already succeeded; local history is best-effort.
+      }
       if (!mounted) return;
       _token.clear();
       setState(() => _deployment = deployment);
@@ -100,10 +105,20 @@ class _CloudflareRelayDialogState extends State<_CloudflareRelayDialog> {
     setState(() { _busy = true; _error = null; });
     try {
       await _client.configureFoxRelay(widget.backend, pending.relayUrl);
+      final host = Uri.tryParse(pending.publicUrl)?.host ?? '';
+      final deployment = CloudflareRelayDeployment(
+        scriptName: host.split('.').first,
+        publicUrl: pending.publicUrl,
+      );
+      try {
+        await CloudflareRelayStore.remember(deployment);
+      } catch (_) {
+        // Fox is linked; local history is best-effort.
+      }
       if (!mounted) return;
       _token.clear();
       setState(() {
-        _deployment = CloudflareRelayDeployment(scriptName: '', publicUrl: pending.publicUrl);
+        _deployment = deployment;
         _unlinked = null;
       });
     } catch (_) {

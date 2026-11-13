@@ -75,8 +75,10 @@ Set GitHub **Settings > Pages > Build and deployment > Source** to
 to write repository contents if automatic tagging is enabled.
 
 GitHub Actions builds the Windows setup and the three Android APKs. The
-release workflow publishes a tagged release only after both app builds
-succeed; it checks that all four files are present and writes checksums.
+automatic release workflow runs on every push to `main` unless the commit
+message contains `[skip release]`. A tagged release is published only after
+both app builds succeed; it checks the app packages and source archive and
+writes checksums.
 Manual workflow runs on a non-tag branch build artifacts without publishing.
 
 ## Release signing
@@ -89,14 +91,18 @@ releases. Keep your private key out of Git.
 
 ## Cloudflare Fox relay
 
-Select Fox, then open **Settings > Fox connection > Deploy Cloudflare relay**.
+Select Fox, then open **Connect > My relays > Add relay** (or use the same
+setup under Settings > Fox connection).
 The app uses the bundled Worker source, requests a scoped Cloudflare API token,
 deploys the Worker and secret, and saves its URL in Fox. Android opens the
 Cloudflare dashboard in a system Custom Tab; Windows uses the system browser.
 The token must be created by the user, scoped to the intended account, and pasted
 into the dialog. The Firefox sign-in WebView itself connects directly; the relay
 can carry the Fox backend's account and service requests, not general VPN traffic.
-The account owner can inspect relayed traffic, so use only your own account.
+The Connect page's **Manage relays** panel shows deployments recorded on this
+device, lets you enable, test, or unlink the current Fox relay, and never stores
+the API token or relay secret in its local relay list. The account owner can
+inspect relayed traffic, so use only your own account.
 See `fox/docs/relay/cloudflare/README.md` for the protocol and manual setup.
 
 ## Windows release signing

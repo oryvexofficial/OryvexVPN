@@ -5,8 +5,11 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 
 import '../../core/backend.dart';
+import '../../core/cloudflare_relay.dart';
+import '../../core/platform_links.dart';
 import '../theme.dart';
 import 'tor_exit_picker.dart' show CountryFlag;
+import 'cloudflare_relay_setup.dart';
 import 'fox_web_signin.dart';
 
 /// Fox's account and location controls live in the same route card as other
@@ -206,7 +209,349 @@ class _FoxControlsState extends State<FoxControls> {
       if (!selectedExists) Padding(padding: const EdgeInsets.only(top: 6), child: Text('Selected country $selected is not in the current list.', style: Ox.body(13, color: Ox.secondary))),
       const SizedBox(height: 8),
       Text('Available countries come from Mozilla. Windows uses a local SOCKS5 proxy; Android can use whole-device VPN.', style: Ox.body(13, color: Ox.secondary)),
+      const SizedBox(height: 18),
+      _FoxRelaySection(backend: widget.backend),
     ]);
+  }
+}
+
+class _FoxRelaySection extends StatefulWidget {
+  const _FoxRelaySection({required this.backend});
+  final CoreBackend backend;
+
+  @override
+  State<_FoxRelaySection> createState() => _FoxRelaySectionState();
+}
+
+class _FoxRelaySectionState extends State<_FoxRelaySection> {
+  List<CloudflareRelayRecord> _records = const [];
+  FoxRelayInfo? _active;
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_refresh());
+  }
+
+  Future<void> _refresh() async {
+    if (mounted) setState(() { _loading = true; _error = null; });
+    try {
+      final records = await CloudflareRelayStore.load();
+      FoxRelayInfo? active;
+      String? error;
+      try {
+        active = await CloudflareRelayClient.readFoxRelay(widget.backend);
+      } catch (_) {
+        error = 'Could not load the current Fox relay status.';
+      }
+      if (mounted) setState(() { _active = active; _records = records; _error = error; });
+    } catch (_) {
+      if (mounted) setState(() => _error = 'Could not load the local relay list. Try refreshing.');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _addRelay() async {
+    await showCloudflareRelaySetup(context, backend: widget.backend);
+    if (mounted) await _refresh();
+  }
+
+  Future<void> _manageRelays() async {
+    await showDialog<void>(
+      context: context,
+      builder: (_) => _FoxRelayManager(backend: widget.backend),
+    );
+    if (mounted) await _refresh();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Divider(height: 1),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Expanded(child: Text('My relays', style: Ox.body(15, weight: FontWeight.w600))),
+            if (_loading)
+              const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+            else
+              IconButton(
+                tooltip: 'Refresh relays',
+                onPressed: _refresh,
+                icon: const Icon(Icons.refresh_rounded, size: 19),
+                visualDensity: VisualDensity.compact,
+              ),
+          ],
+        ),
+        if (_error != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 4, bottom: 8),
+            child: Text(_error!, style: Ox.body(13, color: Ox.warn)),
+          ),
+        if (!_loading && _records.isEmpty && _active == null)
+          Padding(
+            padding: const EdgeInsets.only(top: 4, bottom: 8),
+            child: Text('No relays added yet. Add a personal Cloudflare relay for Fox.', style: Ox.body(13, color: Ox.secondary)),
+          ),
+        if (_active != null && !_records.any((relay) => relay.endpointKey == _active!.endpointKey))
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(_active!.enabled ? Icons.cloud_done_outlined : Icons.cloud_off_outlined,
+                color: _active!.enabled ? Ox.success : Ox.tertiary),
+            title: Text(_active!.displayAddress, maxLines: 1, overflow: TextOverflow.ellipsis),
+            subtitle: Text(_active!.enabled ? 'Active for Fox requests' : 'Saved, currently disabled'),
+          ),
+        if (_records.isNotEmpty)
+          for (final relay in _records)
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              dense: true,
+              leading: Icon(
+                _active?.endpointKey == relay.endpointKey ? Icons.check_circle_outline_rounded : Icons.cloud_outlined,
+                color: _active?.endpointKey == relay.endpointKey ? Ox.success : Ox.tertiary,
+              ),
+              title: Text(relay.scriptName, maxLines: 1, overflow: TextOverflow.ellipsis),
+              subtitle: Text(
+                _active?.endpointKey == relay.endpointKey ? 'Active' : Uri.tryParse(relay.publicUrl)?.host ?? relay.publicUrl,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+        const SizedBox(height: 6),
+        Wrap(
+          spacing: 8,
+          runSpacing: 4,
+          children: [
+            OutlinedButton.icon(
+              onPressed: _loading ? null : _addRelay,
+              icon: const Icon(Icons.add_link_rounded),
+              label: const Text('Add relay'),
+            ),
+            TextButton.icon(
+              onPressed: _manageRelays,
+              icon: const Icon(Icons.tune_rounded),
+              label: const Text('Manage relays'),
+            ),
+          ],
+        ),
+        Text(
+          'Fox relays carry account and service requests only, not general VPN traffic.',
+          style: Ox.body(12, color: Ox.tertiary),
+        ),
+      ],
+    );
+  }
+}
+
+class _FoxRelayManager extends StatefulWidget {
+  const _FoxRelayManager({required this.backend});
+  final CoreBackend backend;
+
+  @override
+  State<_FoxRelayManager> createState() => _FoxRelayManagerState();
+}
+
+class _FoxRelayManagerState extends State<_FoxRelayManager> {
+  List<CloudflareRelayRecord> _records = const [];
+  FoxRelayInfo? _active;
+  bool _loading = true;
+  bool _busy = false;
+  String? _error;
+  String? _health;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_load());
+  }
+
+  Future<void> _load() async {
+    try {
+      final records = await CloudflareRelayStore.load();
+      FoxRelayInfo? active;
+      String? error;
+      try {
+        active = await CloudflareRelayClient.readFoxRelay(widget.backend);
+      } catch (_) {
+        error = 'Could not load the current Fox relay status.';
+      }
+      if (mounted) setState(() { _active = active; _records = records; _error = error; });
+    } catch (_) {
+      if (mounted) setState(() => _error = 'Could not load the local relay list.');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _setEnabled(bool enabled) async {
+    setState(() { _busy = true; _error = null; });
+    try {
+      await CloudflareRelayClient.setFoxRelayEnabled(widget.backend, enabled);
+      await _load();
+    } catch (_) {
+      if (mounted) setState(() => _error = 'Could not update the Fox relay setting.');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _testRelay() async {
+    setState(() { _busy = true; _health = null; _error = null; });
+    try {
+      final result = await widget.backend.foxRequest('POST', '/api/relay/test', {});
+      if (mounted) setState(() => _health = result['ok'] == true
+          ? 'Relay health check passed from this device.'
+          : 'The relay did not confirm that it is reachable.');
+    } catch (_) {
+      if (mounted) setState(() => _health = 'Could not finish the relay health check.');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _unlinkRelay() async {
+    final yes = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Remove relay from Fox?'),
+        content: const Text('This clears Fox’s saved relay address. It does not delete the Worker from Cloudflare.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Remove from Fox')),
+        ],
+      ),
+    );
+    if (yes != true || !mounted) return;
+    setState(() { _busy = true; _error = null; });
+    try {
+      await CloudflareRelayClient.clearFoxRelay(widget.backend);
+      await _load();
+    } catch (_) {
+      if (mounted) setState(() => _error = 'Could not remove the relay from Fox.');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _forget(CloudflareRelayRecord relay) async {
+    try {
+      await CloudflareRelayStore.forget(relay.scriptName);
+      await _load();
+    } catch (_) {
+      if (mounted) setState(() => _error = 'Could not remove this entry from the local list.');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final active = _active;
+    return Dialog(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: 560, maxHeight: MediaQuery.sizeOf(context).height - 48),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(children: [
+                Icon(Icons.cloud_sync_outlined, color: Ox.blue),
+                const SizedBox(width: 10),
+                Expanded(child: Text('Manage Fox relays', style: Ox.headline(22))),
+                IconButton(
+                  tooltip: 'Close',
+                  onPressed: _busy ? null : () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.close_rounded),
+                ),
+              ]),
+              Text(
+                'Fox can use one relay at a time. The local list stores public Worker names only; relay secrets and Cloudflare API tokens are not saved here.',
+                style: Ox.body(13, color: Ox.secondary),
+              ),
+              if (_loading) const Padding(padding: EdgeInsets.symmetric(vertical: 12), child: LinearProgressIndicator()),
+              if (_error != null) Padding(padding: const EdgeInsets.only(top: 10), child: Text(_error!, style: Ox.body(13, color: Ox.warn))),
+              if (active != null) ...[
+                const SizedBox(height: 18),
+                Text('Current Fox relay', style: Ox.body(15, weight: FontWeight.w600)),
+                const SizedBox(height: 4),
+                SelectableText(active.displayAddress, style: Ox.code(13)),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Use relay for Fox requests'),
+                  subtitle: Text(active.enabled ? 'Enabled' : 'Disabled'),
+                  value: active.enabled,
+                  onChanged: _busy ? null : _setEnabled,
+                ),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 4,
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: _busy ? null : _testRelay,
+                      icon: const Icon(Icons.health_and_safety_outlined),
+                      label: const Text('Test relay'),
+                    ),
+                    TextButton.icon(
+                      onPressed: _busy ? null : _unlinkRelay,
+                      icon: const Icon(Icons.link_off_rounded),
+                      label: const Text('Remove from Fox'),
+                    ),
+                  ],
+                ),
+                if (_health != null) Padding(padding: const EdgeInsets.only(top: 6), child: Text(_health!, style: Ox.body(13, color: Ox.secondary))),
+              ] else if (!_loading) ...[
+                const SizedBox(height: 16),
+                Text('No relay is currently configured in Fox.', style: Ox.body(14, color: Ox.secondary)),
+              ],
+              const SizedBox(height: 18),
+              Text('My relays', style: Ox.body(15, weight: FontWeight.w600)),
+              if (_records.isEmpty)
+                Padding(padding: const EdgeInsets.only(top: 8), child: Text('No relays have been deployed from this device yet.', style: Ox.body(13, color: Ox.secondary))),
+              for (final relay in _records)
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(
+                    active?.endpointKey == relay.endpointKey ? Icons.check_circle_outline_rounded : Icons.cloud_outlined,
+                    color: active?.endpointKey == relay.endpointKey ? Ox.success : Ox.tertiary,
+                  ),
+                  title: Text(relay.scriptName, maxLines: 1, overflow: TextOverflow.ellipsis),
+                  subtitle: Text(
+                    active?.endpointKey == relay.endpointKey
+                        ? (active.enabled ? 'Active' : 'Current, disabled')
+                        : Uri.tryParse(relay.publicUrl)?.host ?? relay.publicUrl,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  trailing: IconButton(
+                    tooltip: 'Forget from this device',
+                    onPressed: _busy ? null : () => _forget(relay),
+                    icon: const Icon(Icons.delete_outline_rounded),
+                  ),
+                ),
+              if (_records.isNotEmpty)
+                Text(
+                  'Forgetting an entry only removes it from this device. Delete the Worker in your Cloudflare dashboard if you want to shut it down.',
+                  style: Ox.body(12, color: Ox.tertiary),
+                ),
+              const SizedBox(height: 12),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: _busy ? null : () => openExternal('https://dash.cloudflare.com'),
+                  icon: const Icon(Icons.open_in_new_rounded, size: 17),
+                  label: const Text('Open Cloudflare dashboard'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 
