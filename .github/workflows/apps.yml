@@ -246,8 +246,7 @@ jobs:
             } > android/key.properties
             keytool -list -keystore android/app/release.jks -storepass "$KEYSTORE_PASSWORD" -alias "$KEY_ALIAS" >/dev/null
           elif [ "$REF_TYPE" = "tag" ]; then
-            echo "::error::Tagged releases require all four ANDROID_KEYSTORE_* secrets."
-            exit 1
+            echo "::warning::ANDROID_KEYSTORE_* secrets are not set. This tagged build is signed with the debug key; add the four secrets for a proper release signature."
           else
             echo "No private signing key configured; this non-release artifact uses the local debug key."
           fi

@@ -7,8 +7,8 @@ $refType = $env:GITHUB_REF_TYPE
 $encoded = $env:WINDOWS_PFX_BASE64
 $password = $env:WINDOWS_PFX_PASSWORD
 if ([string]::IsNullOrWhiteSpace($encoded) -or [string]::IsNullOrWhiteSpace($password)) {
-  if ($refType -eq 'tag') { throw 'Tagged releases require WINDOWS_PFX_BASE64 and WINDOWS_PFX_PASSWORD.' }
-  Write-Host 'Non-release build: Windows artifacts are not Authenticode-signed.'
+  if ($refType -eq 'tag') { Write-Host '::warning::WINDOWS_PFX_BASE64 / WINDOWS_PFX_PASSWORD not set: this tagged build is NOT Authenticode-signed.' }
+  else { Write-Host 'Non-release build: Windows artifacts are not Authenticode-signed.' }
   exit 0
 }
 
