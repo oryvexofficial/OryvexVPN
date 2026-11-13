@@ -2,10 +2,20 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
+
 import 'args.dart';
 import 'backend.dart';
 import 'settings.dart';
 import 'win_proxy.dart';
+
+@visibleForTesting
+typedef FoxProcessStarterForTesting = Future<Process> Function(
+  String executable,
+  List<String> arguments, {
+  String? workingDirectory,
+  required ProcessStartMode mode,
+});
 
 /// One run of the core process. Everything a run owns lives here, so a late callback from an
 /// old run can never touch the state of the next one (the bug behind "connect, disconnect,
@@ -33,9 +43,38 @@ class _Session {
 /// over pipes. The runner (windows/runner/main.cpp) puts the app in a kill-on-close job object, so
 /// the core can never outlive the window, even after a crash.
 class DesktopBackend implements CoreBackend {
+  DesktopBackend()
+      : _foxExecutableForTesting = null,
+        _foxDataDirectoryForTesting = null,
+        _foxProcessStarterForTesting = null,
+        _foxStartupAttempts = 60,
+        _foxStartupDelay = const Duration(milliseconds: 250);
+
+  @visibleForTesting
+  DesktopBackend.forTesting({
+    String? foxExecutableForTesting,
+    String? foxDataDirectoryForTesting,
+    FoxProcessStarterForTesting? foxProcessStarterForTesting,
+    int foxStartupAttemptsForTesting = 60,
+    Duration foxStartupDelayForTesting = const Duration(milliseconds: 250),
+  })  : _foxExecutableForTesting = foxExecutableForTesting,
+        _foxDataDirectoryForTesting = foxDataDirectoryForTesting,
+        _foxProcessStarterForTesting = foxProcessStarterForTesting,
+        _foxStartupAttempts = foxStartupAttemptsForTesting,
+        _foxStartupDelay = foxStartupDelayForTesting {
+    if (foxStartupAttemptsForTesting < 1) {
+      throw ArgumentError.value(foxStartupAttemptsForTesting, 'foxStartupAttemptsForTesting');
+    }
+  }
+
   final _events = StreamController<BackendEvent>.broadcast();
   final _recent = <String>[];
   _Session? _current;
+  final String? _foxExecutableForTesting;
+  final String? _foxDataDirectoryForTesting;
+  final FoxProcessStarterForTesting? _foxProcessStarterForTesting;
+  final int _foxStartupAttempts;
+  final Duration _foxStartupDelay;
   Process? _foxProcess;
   String? _foxDataPath;
   String? _foxToken;
@@ -306,10 +345,15 @@ class DesktopBackend implements CoreBackend {
   }
 
   String get _foxExecutable =>
+      _foxExecutableForTesting ??
       '$coreDir$_sep${Platform.isWindows ? 'fox-core.exe' : 'fox-core'}';
 
   String get _foxDataDir {
     if (_foxDataPath != null) return _foxDataPath!;
+    if (_foxDataDirectoryForTesting != null) {
+      _foxDataPath = _foxDataDirectoryForTesting;
+      return _foxDataPath!;
+    }
     final base = Platform.isWindows
         ? (Platform.environment['APPDATA'] ?? Platform.environment['USERPROFILE'] ?? coreDir)
         : (Platform.environment['HOME'] ?? coreDir);
@@ -372,42 +416,67 @@ class DesktopBackend implements CoreBackend {
   }
 
   Future<void> _ensureFoxDaemon({CoreSettings? settings}) async {
+    // A process handle exists as soon as Process.start returns, long before the local API token
+    // is written. Wait for any in-progress startup first so concurrent callers never treat that
+    // half-started process as ready.
+    while (true) {
+      final pending = _foxStarting;
+      if (pending == null) break;
+      await pending;
+    }
     final running = _foxProcess;
     if (running != null) {
-      if (settings != null) {
-        final response = await _foxApi('GET', '/api/settings');
-        final currentConfig = response['config'];
-        final proxy = currentConfig is Map ? currentConfig['proxy'] : null;
-        if (currentConfig is Map && proxy is Map) {
-          final wanted = '${settings.shareLan ? '0.0.0.0' : '127.0.0.1'}:${settings.socksPort}';
-          if (proxy['listen'] != wanted) {
-            final nextConfig = Map<String, dynamic>.from(currentConfig);
-            nextConfig['proxy'] = Map<String, dynamic>.from(proxy)..['listen'] = wanted;
-            await _foxApi('PUT', '/api/settings', <String, Object?>{'config': nextConfig});
+      final token = _foxToken;
+      if (token == null || token.isEmpty) {
+        // Left over from a failed startup: no usable token, so every API call would fail.
+        await _stopFoxDaemon();
+        if (_foxProcess != null) return _ensureFoxDaemon(settings: settings);
+      } else {
+        if (settings != null) {
+          final response = await _foxApi('GET', '/api/settings');
+          final currentConfig = response['config'];
+          final proxy = currentConfig is Map ? currentConfig['proxy'] : null;
+          if (currentConfig is Map && proxy is Map) {
+            final wanted = '${settings.shareLan ? '0.0.0.0' : '127.0.0.1'}:${settings.socksPort}';
+            if (proxy['listen'] != wanted) {
+              final nextConfig = Map<String, dynamic>.from(currentConfig);
+              nextConfig['proxy'] = Map<String, dynamic>.from(proxy)..['listen'] = wanted;
+              await _foxApi('PUT', '/api/settings', <String, Object?>{'config': nextConfig});
+            }
           }
         }
+        return;
       }
-      return;
-    }
-    final pending = _foxStarting;
-    if (pending != null) {
-      await pending;
-      return _ensureFoxDaemon(settings: settings);
     }
     final completer = Completer<void>();
     _foxStarting = completer.future;
+    // Waiters observe the error; this keeps it from surfacing as unhandled when nobody waits.
+    unawaited(completer.future.catchError((Object _) {}));
+    Process? started;
     try {
       final exe = File(_foxExecutable);
       if (!await exe.exists()) {
         throw BackendException('Fox core is missing (${exe.path}). Reinstall the Windows setup package.');
       }
       await _writeFoxConfig(settings);
-      final proc = await Process.start(
-        exe.path,
-        ['-app', '-data-dir', _foxDataDir],
-        workingDirectory: _foxDataDir,
-        mode: Platform.isWindows ? ProcessStartMode.detachedWithStdio : ProcessStartMode.normal,
-      );
+      final args = ['-app', '-data-dir', _foxDataDir];
+      final workingDirectory = _foxDataDir;
+      final mode = Platform.isWindows
+          ? ProcessStartMode.detachedWithStdio
+          : ProcessStartMode.normal;
+      final proc = await (_foxProcessStarterForTesting?.call(
+            exe.path,
+            args,
+            workingDirectory: workingDirectory,
+            mode: mode,
+          ) ??
+          Process.start(
+            exe.path,
+            args,
+            workingDirectory: workingDirectory,
+            mode: mode,
+          ));
+      started = proc;
       _foxProcess = proc;
       _foxToken = null;
       for (final stream in [proc.stdout, proc.stderr]) {
@@ -431,7 +500,7 @@ class DesktopBackend implements CoreBackend {
 
       // The -app process intentionally keeps running while stdin remains open.
       final tokenFile = File('${_foxDataDir}${_sep}local-api.token');
-      for (var i = 0; i < 60; i++) {
+      for (var i = 0; i < _foxStartupAttempts; i++) {
         if (_foxProcess == null) throw BackendException('Fox core stopped during startup.');
         if (await tokenFile.exists()) {
           final token = (await tokenFile.readAsString()).trim();
@@ -444,10 +513,22 @@ class DesktopBackend implements CoreBackend {
             } catch (_) {}
           }
         }
-        await Future<void>.delayed(const Duration(milliseconds: 250));
+        await Future<void>.delayed(_foxStartupDelay);
       }
       throw BackendException('Fox core did not start its local service. Check its log in ${_foxDataDir}${_sep}logs.');
     } catch (e) {
+      // Do not leave a child running without a usable token; the next call restarts cleanly.
+      final leftover = started;
+      if (leftover != null && identical(_foxProcess, leftover)) {
+        _foxPoll?.cancel();
+        _foxPoll = null;
+        _foxProcess = null;
+        _foxToken = null;
+        _foxRun = 0;
+        try {
+          leftover.kill(ProcessSignal.sigkill);
+        } catch (_) {}
+      }
       if (!completer.isCompleted) completer.completeError(e);
       rethrow;
     } finally {
